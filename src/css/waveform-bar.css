@@ -1,0 +1,943 @@
+/**
+ * WaveformBar Styles
+ * Layout: [Left: fixed] — [Centre: flex] — [Right: fixed]
+ */
+
+/* ==========================================================================
+   Variables
+   ========================================================================== */
+
+.waveform-bar,
+.wb-queue-panel {
+    --wb-bg: rgba(17, 17, 17, 0.95);
+    --wb-border: rgba(255, 255, 255, 0.1);
+    --wb-text: #ffffff;
+    --wb-text-muted: rgba(255, 255, 255, 0.5);
+    --wb-accent: #a855f7;
+    --wb-accent-light: #c084fc;
+    --wb-hover: rgba(255, 255, 255, 0.08);
+    --wb-tag-bg: rgba(255, 255, 255, 0.08);
+    --wb-tag-text: rgba(255, 255, 255, 0.7);
+    --wb-fav-color: #ef4444;
+    --wb-cart-color: #4ade80;
+}
+
+.waveform-bar.wb-light,
+.wb-queue-panel.wb-light {
+    --wb-bg: rgba(255, 255, 255, 0.95);
+    --wb-border: rgba(0, 0, 0, 0.1);
+    --wb-text: #1a1a1a;
+    --wb-text-muted: rgba(0, 0, 0, 0.5);
+    --wb-hover: rgba(0, 0, 0, 0.05);
+    --wb-tag-bg: rgba(0, 0, 0, 0.06);
+    --wb-tag-text: rgba(0, 0, 0, 0.6);
+}
+
+.waveform-bar.wb-light {
+    box-shadow: 0 -1px 8px rgba(0, 0, 0, 0.08);
+}
+
+.wb-queue-panel.wb-light {
+    box-shadow: 0 -2px 16px rgba(0, 0, 0, 0.1);
+}
+
+.wb-light .wb-volume-popup {
+    box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* ==========================================================================
+   Bar Shell
+   ========================================================================== */
+
+.waveform-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--wb-bg);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-top: 1px solid var(--wb-border);
+    z-index: 9999;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    color: var(--wb-text);
+    transform: translateY(100%);
+    opacity: 0;
+    transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 0.4s ease;
+}
+
+.waveform-bar.wb-active {
+    transform: translateY(0);
+    opacity: 1;
+}
+
+.waveform-bar * {
+    box-sizing: border-box;
+}
+
+/* ==========================================================================
+   Three-Zone Layout
+   ========================================================================== */
+
+.wb-inner {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 0.5rem 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.wb-left {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-shrink: 0;
+}
+
+.wb-centre {
+    flex: 1;
+    min-width: 120px;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.wb-right {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-shrink: 0;
+}
+
+/* ==========================================================================
+   Controls
+   ========================================================================== */
+
+.wb-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.125rem;
+    flex-shrink: 0;
+}
+
+.wb-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: none;
+    background: transparent;
+    color: var(--wb-text);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+    padding: 0;
+}
+
+.wb-btn:hover {
+    background: var(--wb-hover);
+    color: var(--wb-accent);
+}
+
+.wb-btn.wb-disabled {
+    opacity: 0.25;
+    pointer-events: none;
+}
+
+.wb-btn-sm {
+    width: 32px;
+    height: 32px;
+}
+
+.wb-play {
+    width: 40px;
+    height: 40px;
+    background: var(--wb-accent);
+    color: #fff;
+}
+
+.wb-play:hover {
+    background: var(--wb-accent-light);
+    color: #fff;
+    transform: scale(1.05);
+}
+
+/* ==========================================================================
+   Track Info
+   ========================================================================== */
+
+.wb-track {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    min-width: 0;
+    max-width: 200px;
+    overflow: hidden;
+}
+
+.wb-artwork {
+    width: 40px;
+    height: 40px;
+    border-radius: 6px;
+    background: linear-gradient(135deg, var(--wb-accent), var(--wb-accent-light));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    overflow: hidden;
+}
+
+.wb-artwork img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.wb-track-text {
+    min-width: 0;
+    overflow: hidden;
+    width: 140px;
+}
+
+.wb-title,
+.wb-artist {
+    white-space: nowrap;
+    line-height: 1.3;
+    display: block;
+    overflow: hidden;
+}
+
+.wb-title {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--wb-text);
+}
+
+.wb-artist {
+    font-size: 0.7rem;
+    color: var(--wb-text-muted);
+}
+
+/* Auto-scroll: applied by JS when text overflows */
+.wb-title.wb-scrolling,
+.wb-artist.wb-scrolling {
+    overflow: visible;
+}
+
+.wb-title.wb-scrolling .wb-scroll-inner,
+.wb-artist.wb-scrolling .wb-scroll-inner {
+    display: inline-block;
+    padding-right: 3rem;
+    animation: wb-marquee var(--wb-scroll-duration, 8s) ease-in-out infinite;
+}
+
+@keyframes wb-marquee {
+    0%, 10% {
+        transform: translateX(0);
+    }
+    45%, 55% {
+        transform: translateX(var(--wb-scroll-distance, -100px));
+    }
+    90%, 100% {
+        transform: translateX(0);
+    }
+}
+
+/* ==========================================================================
+   Time Display
+   ========================================================================== */
+
+.wb-time {
+    font-size: 0.7rem;
+    color: var(--wb-text-muted);
+    white-space: nowrap;
+    flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
+    min-width: 70px;
+    text-align: left;
+}
+
+/* ==========================================================================
+   Waveform
+   ========================================================================== */
+
+.wb-waveform-container {
+    flex: 1;
+    min-width: 0;
+    width: 100%;
+}
+
+/* Strip waveform-player cosmetics when inside the bar and ensure
+   width propagates through the full DOM chain. The player's own
+   elements are block divs that don't inherit flex sizing. */
+.wb-waveform-container .waveform-player {
+    width: 100%;
+    background: transparent !important;
+    border: none !important;
+}
+
+.wb-waveform-container .waveform-player-inner {
+    width: 100%;
+    padding: 0 !important;
+}
+
+.wb-waveform-container .waveform-body {
+    width: 100%;
+    gap: 0 !important;
+}
+
+.wb-waveform-container .waveform-track {
+    width: 100%;
+    padding: 0 !important;
+}
+
+/* Active marker pulse */
+.wb-waveform-container .waveform-marker.wb-marker-active {
+    animation: wb-marker-pulse 2s ease-in-out infinite;
+}
+
+@keyframes wb-marker-pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.3;
+    }
+}
+
+/* ==========================================================================
+   Metadata Tags
+   ========================================================================== */
+
+.wb-meta {
+    display: none;
+    align-items: center;
+    gap: 0.375rem;
+    flex-shrink: 0;
+}
+
+.wb-tag {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    background: var(--wb-tag-bg);
+    color: var(--wb-tag-text);
+    border-radius: 4px;
+    font-size: 0.6rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+}
+
+.wb-tag-bpm {
+    color: var(--wb-accent);
+    background: rgba(168, 85, 247, 0.12);
+}
+
+.wb-tag-key {
+    color: #4ade80;
+    background: rgba(74, 222, 128, 0.12);
+}
+
+/* ==========================================================================
+   Action Buttons
+   ========================================================================== */
+
+.wb-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    flex-shrink: 0;
+}
+
+.wb-fav-active {
+    color: var(--wb-fav-color) !important;
+}
+
+.wb-fav-active:hover {
+    background: rgba(239, 68, 68, 0.1);
+}
+
+.wb-action-done {
+    color: var(--wb-cart-color) !important;
+    animation: wb-flash 0.3s ease;
+}
+
+@keyframes wb-flash {
+    0% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.3);
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
+/* ==========================================================================
+   Volume — popup panel above mute button
+   ========================================================================== */
+
+.wb-volume {
+    position: relative;
+    flex-shrink: 0;
+}
+
+.wb-mute.wb-muted {
+    opacity: 0.4;
+}
+
+.wb-volume-popup {
+    position: absolute;
+    bottom: calc(100% + 12px);
+    left: 50%;
+    transform: translateX(-50%) translateY(8px);
+    background: var(--wb-bg);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--wb-border);
+    border-radius: 10px;
+    padding: 1rem 0.5rem;
+    box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.4);
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s;
+}
+
+.wb-volume-popup.wb-volume-open {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: translateX(-50%) translateY(0);
+}
+
+.wb-volume-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    writing-mode: vertical-lr;
+    direction: rtl;
+    width: 6px;
+    height: 100px;
+    background: transparent;
+    outline: none;
+    cursor: pointer;
+}
+
+/* Track — Webkit (Chrome/Safari/Edge) */
+.wb-volume-slider::-webkit-slider-runnable-track {
+    width: 6px;
+    background: var(--wb-border);
+    border-radius: 3px;
+}
+
+/* Thumb — Webkit */
+.wb-volume-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    background: var(--wb-accent);
+    border-radius: 50%;
+    cursor: pointer;
+    margin-left: -5px;
+    transition: transform 0.15s;
+}
+
+.wb-volume-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.2);
+}
+
+/* Track — Firefox */
+.wb-volume-slider::-moz-range-track {
+    width: 6px;
+    background: var(--wb-border);
+    border-radius: 3px;
+    border: none;
+}
+
+/* Thumb — Firefox */
+.wb-volume-slider::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    background: var(--wb-accent);
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+}
+
+.wb-volume-slider::-moz-range-thumb:hover {
+    transform: scale(1.2);
+}
+
+/* ==========================================================================
+   Repeat Button
+   ========================================================================== */
+
+.wb-repeat {
+    opacity: 0.4;
+    transition: opacity 0.15s, color 0.15s;
+}
+
+.wb-repeat.wb-repeat-active {
+    opacity: 1;
+    color: var(--wb-accent);
+}
+
+.wb-repeat.wb-repeat-active:hover {
+    background: rgba(168, 85, 247, 0.12);
+}
+
+/* ==========================================================================
+   Queue Button
+   ========================================================================== */
+
+.wb-queue-btn.wb-active {
+    color: var(--wb-accent);
+    background: rgba(168, 85, 247, 0.12);
+}
+
+/* ==========================================================================
+   Queue Panel — anchored above queue button
+   ========================================================================== */
+
+.wb-queue-panel {
+    position: fixed;
+    bottom: 68px;
+    width: 340px;
+    max-height: 400px;
+    background: var(--wb-bg);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--wb-border);
+    border-radius: 12px;
+    z-index: 9999;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    color: var(--wb-text);
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.4);
+    overflow: hidden;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: translateY(8px);
+    transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s;
+}
+
+.wb-queue-panel.wb-queue-open {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: translateY(0);
+}
+
+.wb-queue-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--wb-border);
+    flex-shrink: 0;
+}
+
+.wb-queue-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.wb-queue-title svg {
+    width: 16px;
+    height: 16px;
+}
+
+.wb-queue-count {
+    background: rgba(168, 85, 247, 0.15);
+    color: var(--wb-accent);
+    padding: 0.1rem 0.45rem;
+    border-radius: 10px;
+    font-size: 0.7rem;
+    font-weight: 600;
+}
+
+.wb-queue-clear {
+    background: transparent;
+    border: none;
+    color: var(--wb-text-muted);
+    cursor: pointer;
+    font-size: 0.7rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    transition: all 0.15s;
+    width: auto;
+    height: auto;
+}
+
+.wb-queue-clear:hover {
+    color: var(--wb-accent);
+    background: var(--wb-hover);
+}
+
+.wb-queue-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0.375rem;
+}
+
+.wb-queue-body::-webkit-scrollbar {
+    width: 5px;
+}
+
+.wb-queue-body::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.wb-queue-body::-webkit-scrollbar-thumb {
+    background: var(--wb-border);
+    border-radius: 3px;
+}
+
+.wb-queue-label {
+    padding: 0.4rem 0.5rem 0.2rem;
+    font-size: 0.6rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--wb-text-muted);
+}
+
+.wb-queue-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.5rem;
+    border-radius: 6px;
+    transition: background 0.15s;
+    cursor: pointer;
+}
+
+.wb-queue-item:hover {
+    background: var(--wb-hover);
+}
+
+.wb-queue-current {
+    background: rgba(168, 85, 247, 0.1);
+}
+
+.wb-queue-num {
+    width: 18px;
+    text-align: center;
+    font-size: 0.7rem;
+    color: var(--wb-text-muted);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.wb-queue-current .wb-queue-num {
+    color: var(--wb-accent);
+}
+
+.wb-queue-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.wb-queue-item-title {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--wb-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.wb-queue-current .wb-queue-item-title {
+    color: var(--wb-accent);
+}
+
+.wb-queue-played .wb-queue-item-title {
+    color: var(--wb-text-muted);
+}
+
+.wb-queue-item-artist {
+    font-size: 0.65rem;
+    color: var(--wb-text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.wb-queue-remove {
+    opacity: 0;
+    transition: opacity 0.15s;
+    background: transparent;
+    border: none;
+    color: var(--wb-text-muted);
+    cursor: pointer;
+    padding: 0.2rem;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.wb-queue-item:hover .wb-queue-remove {
+    opacity: 1;
+}
+
+.wb-queue-remove:hover {
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.1);
+}
+
+.wb-queue-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 2.5rem 1rem;
+    color: var(--wb-text-muted);
+    text-align: center;
+}
+
+.wb-queue-empty svg {
+    opacity: 0.3;
+    margin-bottom: 0.5rem;
+}
+
+.wb-queue-empty p {
+    font-size: 0.8rem;
+    margin: 0;
+}
+
+/* ==========================================================================
+   Helper CSS Classes
+   ========================================================================== */
+
+.wb-icon-swap .wb-show-pause {
+    display: none;
+}
+
+.wb-icon-swap .wb-show-play {
+    display: inline;
+}
+
+.wb-icon-swap.wb-playing .wb-show-pause {
+    display: inline;
+}
+
+.wb-icon-swap.wb-playing .wb-show-play {
+    display: none;
+}
+
+.wb-eq-bars {
+    display: inline-flex;
+    gap: 2px;
+    align-items: flex-end;
+    height: 14px;
+    vertical-align: middle;
+}
+
+.wb-eq-bars span {
+    width: 3px;
+    height: 4px;
+    background: currentColor;
+    border-radius: 1px;
+    opacity: 0.3;
+}
+
+.wb-playing .wb-eq-bars span {
+    opacity: 1;
+    animation: wb-eq 0.8s ease-in-out infinite;
+}
+
+.wb-playing .wb-eq-bars span:nth-child(1) {
+    animation-delay: 0s;
+}
+
+.wb-playing .wb-eq-bars span:nth-child(2) {
+    animation-delay: 0.15s;
+}
+
+.wb-playing .wb-eq-bars span:nth-child(3) {
+    animation-delay: 0.3s;
+}
+
+.wb-playing .wb-eq-bars span:nth-child(4) {
+    animation-delay: 0.45s;
+}
+
+@keyframes wb-eq {
+    0%, 100% {
+        height: 4px;
+    }
+    50% {
+        height: 14px;
+    }
+}
+
+.wb-card-highlight {
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.wb-card-highlight.wb-current {
+    border-color: var(--wb-accent, #a855f7);
+    box-shadow: 0 0 0 1px var(--wb-accent, #a855f7);
+}
+
+.wb-current .wb-accent-current {
+    color: var(--wb-accent, #a855f7);
+}
+
+.wb-pulse-playing.wb-playing {
+    animation: wb-pulse 2s ease-in-out infinite;
+}
+
+@keyframes wb-pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.7;
+    }
+}
+
+/* ==========================================================================
+   Page State Helper Classes (for trigger elements)
+   ========================================================================== */
+
+/*
+ * .wb-favorited — applied to triggers whose track is favorited
+ * .wb-in-cart — applied to triggers whose track is in cart
+ *
+ * Usage in your site CSS:
+ *   .my-card.wb-favorited .heart-icon { color: red; fill: red; }
+ *   .my-card.wb-in-cart .cart-badge { display: block; }
+ */
+
+/* Convenience: hide/show elements based on favorite state */
+.wb-show-if-fav {
+    display: none;
+}
+
+.wb-favorited .wb-show-if-fav {
+    display: inline;
+}
+
+.wb-favorited .wb-hide-if-fav {
+    display: none;
+}
+
+.wb-show-if-cart {
+    display: none;
+}
+
+.wb-in-cart .wb-show-if-cart {
+    display: inline;
+}
+
+.wb-in-cart .wb-hide-if-cart {
+    display: none;
+}
+
+/* ==========================================================================
+   Responsive — Stacking on mobile
+   ========================================================================== */
+
+@media (max-width: 768px) {
+    .wb-inner {
+        padding: 0.5rem 1rem;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+
+    /* Top row: controls + track info fill width */
+    .wb-left {
+        width: auto;
+        min-width: auto;
+        flex: 1;
+    }
+
+    /* Bottom row: waveform spans full width */
+    .wb-centre {
+        order: 10;
+        flex-basis: 100%;
+        min-width: 100%;
+    }
+
+    /* Right zone stays on top row */
+    .wb-right {
+        order: 2;
+    }
+
+    .wb-track-text {
+        width: auto;
+        max-width: 200px;
+    }
+
+    .wb-meta {
+        display: none !important;
+    }
+
+    .wb-actions {
+        display: none;
+    }
+
+    .wb-time {
+        display: none;
+    }
+
+    .wb-queue-panel {
+        left: 0;
+        right: 0;
+        width: auto;
+        bottom: 90px;
+        border-radius: 12px 12px 0 0;
+        max-height: 50vh;
+    }
+
+    .wb-volume-popup {
+        left: auto;
+        right: 0;
+        transform: none;
+    }
+}
+
+@media (max-width: 480px) {
+    .wb-left {
+        gap: 0.5rem;
+    }
+
+    .wb-track-text {
+        width: auto;
+        max-width: 140px;
+    }
+
+    .wb-prev, .wb-next {
+        display: none;
+    }
+
+    .wb-repeat {
+        display: none;
+    }
+
+    .wb-volume {
+        display: none;
+    }
+
+    .wb-queue-panel {
+        bottom: 85px;
+    }
+}
