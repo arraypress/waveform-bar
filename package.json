@@ -1,6 +1,6 @@
 {
   "name": "@arraypress/waveform-bar",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Persistent bottom audio player bar for WaveformPlayer - queue management, page persistence, and seamless playback.",
   "main": "dist/waveform-bar.js",
   "module": "dist/waveform-bar.esm.js",
@@ -14,7 +14,7 @@
   "scripts": {
     "build": "npm run build:js && npm run build:css",
     "build:js": "npm run build:iife && npm run build:esm && npm run build:min",
-    "build:css": "cp src/css/waveform-bar.css dist/ && esbuild src/css/waveform-bar.css --minify --outfile=dist/waveform-bar.min.css",
+    "build:css": "cp src/css/waveform-bar.css dist/ && esbuild src/css/waveform-bar.css --minify --outfile=dist/waveform-bar.min.css && cp src/css/waveform-bar-icons.css dist/ && cp -r src/icons dist/icons",
     "build:iife": "esbuild src/js/index.js --bundle --format=iife --outfile=dist/waveform-bar.js",
     "build:esm": "esbuild src/js/index.js --bundle --format=esm --outfile=dist/waveform-bar.esm.js",
     "build:min": "esbuild src/js/index.js --bundle --format=iife --minify --outfile=dist/waveform-bar.min.js",
