@@ -5,7 +5,14 @@
 
 import {ICONS} from './icons.js';
 import {extractTitle, escapeHtml, formatTime, parseTrackFromElement} from './utils.js';
-import {saveQueueState, restoreQueueState, saveVolume, restoreVolume, saveFavorites, restoreFavorites} from './storage.js';
+import {
+    saveQueueState,
+    restoreQueueState,
+    saveVolume,
+    restoreVolume,
+    saveFavorites,
+    restoreFavorites
+} from './storage.js';
 import {fireAction} from './actions.js';
 import {buildBarHTML} from './dom.js';
 import {createQueuePanel, renderQueue} from './queue.js';
@@ -36,6 +43,7 @@ const DEFAULTS = {
     waveformColor: null,
     progressColor: null,
     markerColor: 'rgba(255, 255, 255, 0.25)',
+    configPath: null,       // Directory for auto-resolved config JSON files (e.g. 'waveforms/')
     volume: 1,
     storageKey: 'waveform-bar',
     actions: null,
@@ -142,11 +150,26 @@ export class WaveformBar {
      * @returns {WaveformBar}
      */
     destroy() {
-        if (this.player) { this.player.destroy(); this.player = null; }
-        if (this.barEl) { this.barEl.remove(); this.barEl = null; }
-        if (this.queueEl) { this.queueEl.remove(); this.queueEl = null; }
-        if (this._observer) { this._observer.disconnect(); this._observer = null; }
-        if (this._beforeUnloadHandler) { window.removeEventListener('beforeunload', this._beforeUnloadHandler); this._beforeUnloadHandler = null; }
+        if (this.player) {
+            this.player.destroy();
+            this.player = null;
+        }
+        if (this.barEl) {
+            this.barEl.remove();
+            this.barEl = null;
+        }
+        if (this.queueEl) {
+            this.queueEl.remove();
+            this.queueEl = null;
+        }
+        if (this._observer) {
+            this._observer.disconnect();
+            this._observer = null;
+        }
+        if (this._beforeUnloadHandler) {
+            window.removeEventListener('beforeunload', this._beforeUnloadHandler);
+            this._beforeUnloadHandler = null;
+        }
 
         document.querySelectorAll('[data-wb-play],[data-wb-queue]').forEach(el => delete el._wbBound);
         document.querySelectorAll('.wb-current,.wb-playing').forEach(el => el.classList.remove('wb-current', 'wb-playing'));
@@ -315,7 +338,8 @@ export class WaveformBar {
                     // Repeat current track
                     if (this.player) {
                         this.player.seekTo(0);
-                        this.player.play().catch(() => {});
+                        this.player.play().catch(() => {
+                        });
                     }
                     return;
                 }
@@ -549,7 +573,9 @@ export class WaveformBar {
         return this;
     }
 
-    getVolume() { return this.volume; }
+    getVolume() {
+        return this.volume;
+    }
 
     toggleMute() {
         if (this.isMuted) {
@@ -672,11 +698,27 @@ export class WaveformBar {
         return (this.currentIndex >= 0 && this.currentIndex < this.queue.length) ? this.queue[this.currentIndex] : null;
     }
 
-    getQueue() { return [...this.queue]; }
-    getCurrentIndex() { return this.currentIndex; }
-    isCurrentlyPlaying(url) { const c = this.getCurrentTrack(); return this.isPlaying && c && c.url === url; }
-    isCurrentTrack(url) { const c = this.getCurrentTrack(); return c && c.url === url; }
-    getPlayer() { return this.player; }
+    getQueue() {
+        return [...this.queue];
+    }
+
+    getCurrentIndex() {
+        return this.currentIndex;
+    }
+
+    isCurrentlyPlaying(url) {
+        const c = this.getCurrentTrack();
+        return this.isPlaying && c && c.url === url;
+    }
+
+    isCurrentTrack(url) {
+        const c = this.getCurrentTrack();
+        return c && c.url === url;
+    }
+
+    getPlayer() {
+        return this.player;
+    }
 
     // =====================================================================
     // Events
@@ -712,10 +754,21 @@ export class WaveformBar {
     // UI: Bar visibility & Queue panel
     // =====================================================================
 
-    show() { if (this.barEl) this.barEl.classList.add('wb-active'); return this; }
-    hide() { if (this.barEl) this.barEl.classList.remove('wb-active'); this.closeQueuePanel(); this.closeVolumePopup(); return this; }
+    show() {
+        if (this.barEl) this.barEl.classList.add('wb-active');
+        return this;
+    }
 
-    toggleQueuePanel() { return this.queueOpen ? this.closeQueuePanel() : this.openQueuePanel(); }
+    hide() {
+        if (this.barEl) this.barEl.classList.remove('wb-active');
+        this.closeQueuePanel();
+        this.closeVolumePopup();
+        return this;
+    }
+
+    toggleQueuePanel() {
+        return this.queueOpen ? this.closeQueuePanel() : this.openQueuePanel();
+    }
 
     openQueuePanel() {
         if (!this.queueEl) return this;
@@ -779,7 +832,19 @@ export class WaveformBar {
         this._updateFavoriteUI();
 
         const loadOpts = {artwork: track.artwork, album: track.album};
-        if (track.waveform) loadOpts.waveform = track.waveform;
+
+        // Pass pre-existing waveform data if available
+        if (track.waveform) {
+            loadOpts.waveform = track.waveform;
+        }
+
+        // Auto-resolve config JSON from configPath
+        if (this.config.configPath && track.url) {
+            const audioFile = track.url.split('/').pop().split('?')[0];
+            const jsonFile = audioFile.replace(/\.[^.]+$/, '.json');
+            const path = this.config.configPath.replace(/\/?$/, '/');
+            loadOpts.config = path + jsonFile;
+        }
 
         // Always pass markers — empty array clears previous track's markers
         if (track.markers && track.markers.length) {
@@ -1045,7 +1110,8 @@ export class WaveformBar {
                 if (brightness > 128) return 'light';
                 if (brightness < 128) return 'dark';
             }
-        } catch (e) {}
+        } catch (e) {
+        }
 
         // 3. System preference
         if (window.matchMedia?.('(prefers-color-scheme: light)').matches) return 'light';
@@ -1199,7 +1265,18 @@ export class WaveformBar {
 
         // Use load() instead of loadTrack() to avoid auto-play.
         // We handle seek and play manually after the audio is ready.
-        if (track.waveform) this.player.options.waveform = track.waveform;
+        if (track.waveform) {
+            this.player.options.waveform = track.waveform;
+        }
+
+        // Auto-resolve config JSON from configPath
+        if (this.config.configPath && track.url) {
+            const audioFile = track.url.split('/').pop().split('?')[0];
+            const jsonFile = audioFile.replace(/\.[^.]+$/, '.json');
+            const path = this.config.configPath.replace(/\/?$/, '/');
+            this.player.options.config = path + jsonFile;
+        }
+
         this.player.options.title = track.title || '';
         this.player.options.subtitle = track.artist || '';
 
@@ -1219,8 +1296,6 @@ export class WaveformBar {
 
         this.player.load(track.url).then(() => {
             if (this.player) this.player.setVolume(this.isMuted ? 0 : this.volume);
-
-            console.log('RESTORE: position =', state.position, 'duration =', this.player?.audio?.duration);
 
             if (state.isPlaying && this.config.autoResume) {
                 try {
@@ -1249,7 +1324,8 @@ export class WaveformBar {
                     }
                 }, 100);
             }
-        }).catch(() => {});
+        }).catch(() => {
+        });
 
         this._renderQueue();
         this._syncPageState();
