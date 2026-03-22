@@ -43,7 +43,6 @@ const DEFAULTS = {
     waveformColor: null,
     progressColor: null,
     markerColor: 'rgba(255, 255, 255, 0.25)',
-    configPath: null,       // Directory for auto-resolved config JSON files (e.g. 'waveforms/')
     volume: 1,
     storageKey: 'waveform-bar',
     actions: null,
@@ -838,14 +837,6 @@ export class WaveformBar {
             loadOpts.waveform = track.waveform;
         }
 
-        // Auto-resolve config JSON from configPath
-        if (this.config.configPath && track.url) {
-            const audioFile = track.url.split('/').pop().split('?')[0];
-            const jsonFile = audioFile.replace(/\.[^.]+$/, '.json');
-            const path = this.config.configPath.replace(/\/?$/, '/');
-            loadOpts.config = path + jsonFile;
-        }
-
         // Always pass markers — empty array clears previous track's markers
         if (track.markers && track.markers.length) {
             const defaultColor = this.config.markerColor;
@@ -1269,14 +1260,6 @@ export class WaveformBar {
             this.player.options.waveform = track.waveform;
         }
 
-        // Auto-resolve config JSON from configPath
-        if (this.config.configPath && track.url) {
-            const audioFile = track.url.split('/').pop().split('?')[0];
-            const jsonFile = audioFile.replace(/\.[^.]+$/, '.json');
-            const path = this.config.configPath.replace(/\/?$/, '/');
-            this.player.options.config = path + jsonFile;
-        }
-
         this.player.options.title = track.title || '';
         this.player.options.subtitle = track.artist || '';
 
@@ -1344,4 +1327,5 @@ export class WaveformBar {
     _restoreFavorites() {
         this._favorites = restoreFavorites(this.config.storageKey);
     }
+
 }

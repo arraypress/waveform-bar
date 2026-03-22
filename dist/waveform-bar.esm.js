@@ -971,7 +971,9 @@ var WaveformBar = class {
     this._updateTrackDisplay(track);
     this._updateFavoriteUI();
     const loadOpts = { artwork: track.artwork, album: track.album };
-    if (track.waveform) loadOpts.waveform = track.waveform;
+    if (track.waveform) {
+      loadOpts.waveform = track.waveform;
+    }
     if (track.markers && track.markers.length) {
       const defaultColor = this.config.markerColor;
       loadOpts.markers = track.markers.map((m) => ({
@@ -1309,7 +1311,9 @@ var WaveformBar = class {
     this._updateTrackDisplay(track);
     this._updateFavoriteUI();
     this._updateNavButtons();
-    if (track.waveform) this.player.options.waveform = track.waveform;
+    if (track.waveform) {
+      this.player.options.waveform = track.waveform;
+    }
     this.player.options.title = track.title || "";
     this.player.options.subtitle = track.artist || "";
     if (track.markers && track.markers.length) {
@@ -1326,7 +1330,6 @@ var WaveformBar = class {
     this._currentMarkerIndex = -1;
     this.player.load(track.url).then(() => {
       if (this.player) this.player.setVolume(this.isMuted ? 0 : this.volume);
-      console.log("RESTORE: position =", state.position, "duration =", this.player?.audio?.duration);
       if (state.isPlaying && this.config.autoResume) {
         try {
           const p = this.player.play();
