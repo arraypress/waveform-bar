@@ -1,6 +1,6 @@
 {
   "name": "@arraypress/waveform-bar",
-  "version": "1.2.1",
+  "version": "1.3.0",
   "description": "Persistent bottom audio player bar for WaveformPlayer - queue management, page persistence, and seamless playback.",
   "main": "dist/waveform-bar.js",
   "module": "dist/waveform-bar.esm.js",

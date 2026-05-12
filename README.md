@@ -78,6 +78,33 @@ npm install @arraypress/waveform-player @arraypress/waveform-bar
 Click the button → the bar slides up from the bottom → music plays. Add more buttons anywhere on the page and they all
 share the same player bar.
 
+## Inline WaveformPlayer integration (v1.3+)
+
+When `@arraypress/waveform-player` 1.6+ instances are mounted on the same page with `audioMode: 'external'`, WaveformBar discovers them automatically and treats them as **synchronized visual surfaces**:
+
+- Click the inline player's play button → playback happens in the bar
+- The bar's audio progress mirrors into the inline canvas in real time (scrubber moves, play/pause icon flips)
+- When the bar switches tracks, the previously-active inline player resets to paused
+
+No configuration on the bar side — the discovery scan runs on init + MutationObserver tick, listening for `waveformplayer:request-play|pause|seek` events at the document level. Any inline player whose URL matches the bar's current track gets `setPlayingState(...)` and `setProgress(...)` calls pumped to it.
+
+```html
+<!-- The same element doubles as a bar trigger (data-wb-play) AND an
+     inline visual surface (data-waveform-player + audio-mode). Single
+     audio source (the bar), multiple visual surfaces (bar + every
+     matching inline player). -->
+<div data-waveform-player
+     data-audio-mode="external"
+     data-url="song.mp3"
+     data-waveform-style="bars"
+
+     data-wb-play
+     data-wb-url="song.mp3"
+     data-wb-title="..."></div>
+```
+
+This is the SoundCloud / Bandcamp pattern — the persistent bar owns playback, but every place a track surfaces on the page gets its own playable, progress-aware visualization.
+
 ## Data Attributes
 
 ### Play Trigger (`data-wb-play`)

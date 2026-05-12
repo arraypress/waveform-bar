@@ -537,6 +537,7 @@
           this.isPlaying = true;
           this._updatePlayButton();
           this._syncPageState();
+          this._pumpExternalPlayState(true);
           const track = this.getCurrentTrack();
           this._emit("play", { track });
           if (this.config.onPlay) this.config.onPlay(track);
@@ -545,6 +546,7 @@
           this.isPlaying = false;
           this._updatePlayButton();
           this._syncPageState();
+          this._pumpExternalPlayState(false);
           this._saveState();
           const track = this.getCurrentTrack();
           this._emit("pause", { track });
@@ -554,6 +556,7 @@
           this.isPlaying = false;
           this._updatePlayButton();
           this._syncPageState();
+          this._pumpExternalPlayState(false);
           if (this.timeCurrentEl) this.timeCurrentEl.textContent = "0:00";
           if (this.repeat === "one") {
             if (this.player) {
@@ -575,6 +578,7 @@
           this._lastPosition = currentTime;
           if (this.timeCurrentEl) this.timeCurrentEl.textContent = formatTime(currentTime);
           if (this.timeTotalEl) this.timeTotalEl.textContent = formatTime(duration);
+          this._pumpExternalProgress(currentTime, duration);
           if (!this._lastSaveTime || currentTime - this._lastSaveTime > 2) {
             this._lastSaveTime = currentTime;
             this._saveState();
@@ -612,6 +616,102 @@
           const track = parseTrackFromElement(el);
           if (track) this.addToQueue(track);
         });
+      });
+      this._attachExternalPlayers();
+    }
+    /**
+     * Discover external-mode WaveformPlayer instances and listen for
+     * their request-play / request-pause / request-seek events. Also
+     * builds a url → Set<WaveformPlayer> map used by _syncPageState()
+     * and the onTimeUpdate callback to push state into the matching
+     * inline visualizations.
+     *
+     * Idempotent — safe to call repeatedly. Late-mounted players are
+     * picked up by the MutationObserver in _observeDOM().
+     *
+     * @private
+     */
+    _attachExternalPlayers() {
+      if (!this._externalListenersBound) {
+        this._externalListenersBound = true;
+        document.addEventListener("waveformplayer:request-play", (e) => {
+          const t = e.detail;
+          if (!t || !t.url) return;
+          e.preventDefault();
+          this.play(t);
+        });
+        document.addEventListener("waveformplayer:request-pause", (e) => {
+          const t = e.detail;
+          if (!t || !t.url) return;
+          const current = this.getCurrentTrack();
+          if (current && current.url === t.url) {
+            e.preventDefault();
+            if (this.isPlaying) this.togglePlay();
+          }
+        });
+        document.addEventListener("waveformplayer:request-seek", (e) => {
+          const t = e.detail;
+          if (!t || !t.url || typeof t.percent !== "number") return;
+          const current = this.getCurrentTrack();
+          if (current && current.url === t.url && this.player && this.player.audio) {
+            e.preventDefault();
+            this.player.seekToPercent(t.percent);
+          }
+        });
+      }
+      this._externalPlayers = /* @__PURE__ */ new Map();
+      const WP = window.WaveformPlayer;
+      if (!WP || !WP.instances) return;
+      document.querySelectorAll('[data-waveform-player][data-audio-mode="external"]').forEach((el) => {
+        const inst = WP.instances.get(el.id);
+        if (!inst || !inst.options || !inst.options.url) return;
+        const url = inst.options.url;
+        if (!this._externalPlayers.has(url)) this._externalPlayers.set(url, /* @__PURE__ */ new Set());
+        this._externalPlayers.get(url).add(inst);
+      });
+    }
+    /**
+     * Push playing-state into every external-mode player whose URL
+     * matches the currently playing track. Other URLs get set to
+     * false (paused) — covers the case where the bar switched tracks
+     * and the previously-current external player should stop showing
+     * its play indicator.
+     *
+     * @private
+     * @param {boolean} playing
+     */
+    _pumpExternalPlayState(playing) {
+      if (!this._externalPlayers || this._externalPlayers.size === 0) return;
+      const current = this.getCurrentTrack();
+      const currentUrl = current ? current.url : null;
+      this._externalPlayers.forEach((set, url) => {
+        const isCurrent = url === currentUrl;
+        set.forEach((player) => {
+          if (typeof player.setPlayingState === "function") {
+            player.setPlayingState(isCurrent && playing);
+          }
+        });
+      });
+    }
+    /**
+     * Push progress (currentTime + duration) into the external-mode
+     * player(s) tracking the current URL. Called on every timeupdate
+     * tick of the internal player.
+     *
+     * @private
+     * @param {number} currentTime
+     * @param {number} duration
+     */
+    _pumpExternalProgress(currentTime, duration) {
+      if (!this._externalPlayers || this._externalPlayers.size === 0) return;
+      const current = this.getCurrentTrack();
+      if (!current) return;
+      const set = this._externalPlayers.get(current.url);
+      if (!set) return;
+      set.forEach((player) => {
+        if (typeof player.setProgress === "function") {
+          player.setProgress(currentTime, duration);
+        }
       });
     }
     _observeDOM() {
@@ -968,6 +1068,7 @@
     _loadCurrentTrack() {
       const track = this.getCurrentTrack();
       if (!track || !this.player) return;
+      this._pumpExternalPlayState(false);
       this.show();
       this._updateTrackDisplay(track);
       this._updateFavoriteUI();
