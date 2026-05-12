@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.1] - 2026-05-13
+
+### Fixed
+
+- **Cross-page state seed** — when a new external WaveformPlayer instance is discovered after the bar is already playing (typical SPA / page-navigation flow: hit Play on a card → navigate to the product page → inline player mounts), the bar now immediately seeds the newly-discovered player with `setPlayingState()` and `setProgress()` so its canvas reflects the live bar state without waiting for the next `timeupdate` tick.
+
 ## [1.3.0] - 2026-05-13
 
 ### New Features

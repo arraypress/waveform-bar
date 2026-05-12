@@ -473,16 +473,42 @@ export class WaveformBar {
         // (single querySelectorAll + Map insert) and avoids stale entries
         // for players that have been torn down. Late-mounted players
         // come in via the MutationObserver tick.
+        const previous = this._externalPlayers || new Map();
         this._externalPlayers = new Map();
         const WP = window.WaveformPlayer;
         if (!WP || !WP.instances) return;
+
+        const newlyDiscovered = [];
         document.querySelectorAll('[data-waveform-player][data-audio-mode="external"]').forEach((el) => {
             const inst = WP.instances.get(el.id);
             if (!inst || !inst.options || !inst.options.url) return;
             const url = inst.options.url;
             if (!this._externalPlayers.has(url)) this._externalPlayers.set(url, new Set());
             this._externalPlayers.get(url).add(inst);
+            // Track players that weren't in the previous map — those need
+            // initial state seeded so cross-page navigation (bar already
+            // playing when an inline player mounts) syncs correctly.
+            const wasKnown = previous.get(url) && previous.get(url).has(inst);
+            if (!wasKnown) newlyDiscovered.push({inst, url});
         });
+
+        // Seed newly-discovered players with current bar state. Without
+        // this, an inline player that mounts AFTER the bar is already
+        // playing would show "paused" until the next state event fires
+        // (which might never happen if the user just sits on the page).
+        if (newlyDiscovered.length) {
+            const current = this.getCurrentTrack();
+            const currentUrl = current ? current.url : null;
+            newlyDiscovered.forEach(({inst, url}) => {
+                const isCurrent = url === currentUrl;
+                if (typeof inst.setPlayingState === 'function') {
+                    inst.setPlayingState(isCurrent && this.isPlaying);
+                }
+                if (isCurrent && typeof inst.setProgress === 'function' && this.player && this.player.audio) {
+                    inst.setProgress(this.player.audio.currentTime || 0, this.player.audio.duration || 0);
+                }
+            });
+        }
     }
 
     /**

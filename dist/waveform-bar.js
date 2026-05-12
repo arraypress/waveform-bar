@@ -659,16 +659,33 @@
           }
         });
       }
+      const previous = this._externalPlayers || /* @__PURE__ */ new Map();
       this._externalPlayers = /* @__PURE__ */ new Map();
       const WP = window.WaveformPlayer;
       if (!WP || !WP.instances) return;
+      const newlyDiscovered = [];
       document.querySelectorAll('[data-waveform-player][data-audio-mode="external"]').forEach((el) => {
         const inst = WP.instances.get(el.id);
         if (!inst || !inst.options || !inst.options.url) return;
         const url = inst.options.url;
         if (!this._externalPlayers.has(url)) this._externalPlayers.set(url, /* @__PURE__ */ new Set());
         this._externalPlayers.get(url).add(inst);
+        const wasKnown = previous.get(url) && previous.get(url).has(inst);
+        if (!wasKnown) newlyDiscovered.push({ inst, url });
       });
+      if (newlyDiscovered.length) {
+        const current = this.getCurrentTrack();
+        const currentUrl = current ? current.url : null;
+        newlyDiscovered.forEach(({ inst, url }) => {
+          const isCurrent = url === currentUrl;
+          if (typeof inst.setPlayingState === "function") {
+            inst.setPlayingState(isCurrent && this.isPlaying);
+          }
+          if (isCurrent && typeof inst.setProgress === "function" && this.player && this.player.audio) {
+            inst.setProgress(this.player.audio.currentTime || 0, this.player.audio.duration || 0);
+          }
+        });
+      }
     }
     /**
      * Push playing-state into every external-mode player whose URL
