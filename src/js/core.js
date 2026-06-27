@@ -38,6 +38,7 @@ const DEFAULTS = {
     theme: null,            // 'dark', 'light', or null (dark by default)
     wide: false,            // true = content spans full width (lifts the 1400px cap)
     maxWidth: null,         // custom content max-width (CSS value), e.g. '1200px'; overrides `wide`
+    errorText: null,        // custom "audio failed to load" message (null = player default)
     waveformStyle: 'mirror',
     waveformHeight: 32,
     barWidth: 2,
@@ -388,6 +389,7 @@ export class WaveformBar {
             height: this.config.waveformHeight,
             barWidth: this.config.barWidth,
             barSpacing: this.config.barSpacing,
+            errorText: this.config.errorText,   // null -> player uses its own default
             singlePlay: false,
             onPlay: () => {
                 this.isPlaying = true;
