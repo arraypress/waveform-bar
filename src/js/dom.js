@@ -39,9 +39,16 @@ export function buildBarHTML(config) {
     </div>`;
     left += '</div>';
 
-    // --- Centre zone: waveform + time ---
+    // --- Centre zone: waveform (or a classic seek bar) + time ---
+    // The waveform container is always rendered so the embedded player has a
+    // mount point; in classic mode (`waveform: false`) CSS hides it via the
+    // `.wb-classic` bar class and the seek bar takes over.
+    const seekbar = config.waveform ? '' : `<div class="wb-seekbar" role="slider" tabindex="0" aria-label="Seek" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <div class="wb-seekbar-track"><div class="wb-seekbar-fill"></div><div class="wb-seekbar-handle"></div></div>
+    </div>`;
     const centre = `<div class="wb-centre">
         <div class="wb-waveform-container"></div>
+        ${seekbar}
         <div class="wb-time"><span class="wb-time-current">0:00</span> / <span class="wb-time-total">0:00</span></div>
     </div>`;
 
@@ -84,5 +91,12 @@ export function buildBarHTML(config) {
 
     right += '</div>';
 
-    return `<div class="wb-inner">${left}${centre}${right}</div>`;
+    // Collapse-to-pill toggle. A direct child of .wb-inner (its own zone) so
+    // the collapsed-pill CSS can hide .wb-centre/.wb-right while keeping this
+    // button visible as the "expand" affordance.
+    const collapse = config.collapsible
+        ? `<button class="wb-btn wb-btn-sm wb-collapse" aria-label="Collapse" title="Collapse">${ICONS.collapse}</button>`
+        : '';
+
+    return `<div class="wb-inner">${left}${centre}${right}${collapse}</div>`;
 }

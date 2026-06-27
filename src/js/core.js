@@ -38,6 +38,9 @@ const DEFAULTS = {
     theme: null,            // 'dark', 'light', or null (dark by default)
     wide: false,            // true = content spans full width (lifts the 1400px cap)
     maxWidth: null,         // custom content max-width (CSS value), e.g. '1200px'; overrides `wide`
+    position: 'bottom',     // 'bottom' (default) or 'top' — which edge the bar docks to
+    collapsible: false,     // show a collapse button that shrinks the bar to a floating pill
+    waveform: true,         // false = classic Spotify-style seek bar instead of the waveform
     errorText: null,        // custom "audio failed to load" message (null = player default)
     share: false,           // show a "copy share link" button (emits ?<shareParam>=<seconds>)
     shareParam: 'wt',       // URL query param for the shared timestamp (seconds)
@@ -293,6 +296,11 @@ export class WaveformBar {
         const maxWidth = this.config.maxWidth || (this.config.wide ? '100%' : null);
         if (maxWidth) this.barEl.style.setProperty('--wb-max-width', maxWidth);
 
+        // Dock to the top edge instead of the bottom (flips slide direction).
+        if (this.config.position === 'top') this.barEl.classList.add('wb-top');
+        // Classic mode: hide the player canvas, drive a seek bar instead.
+        if (!this.config.waveform) this.barEl.classList.add('wb-classic');
+
         this.barEl.id = 'waveform-bar';
         this.barEl.innerHTML = buildBarHTML(this.config);
         document.body.appendChild(this.barEl);
@@ -311,9 +319,20 @@ export class WaveformBar {
         this.cartBtnEl = this.barEl.querySelector('.wb-cart');
         this.timeCurrentEl = this.barEl.querySelector('.wb-time-current');
         this.timeTotalEl = this.barEl.querySelector('.wb-time-total');
+        this.seekbarEl = this.barEl.querySelector('.wb-seekbar');
+        this.seekbarFillEl = this.barEl.querySelector('.wb-seekbar-fill');
+        this.seekbarHandleEl = this.barEl.querySelector('.wb-seekbar-handle');
+        this.collapseBtnEl = this.barEl.querySelector('.wb-collapse');
 
         // Bind controls
         this.playBtnEl.addEventListener('click', () => this.togglePlay());
+
+        // Classic seek bar (no-waveform mode) + collapse-to-pill toggle.
+        if (this.seekbarEl) this._bindSeekbar();
+        if (this.collapseBtnEl) {
+            this.collapseBtnEl.addEventListener('click', () => this.toggleCollapse());
+            if (this._readCollapsed()) this.collapse();
+        }
 
         const prevBtn = this.barEl.querySelector('.wb-prev');
         const nextBtn = this.barEl.querySelector('.wb-next');
@@ -489,6 +508,11 @@ export class WaveformBar {
                 this._lastPosition = currentTime;
                 if (this.timeCurrentEl) this.timeCurrentEl.textContent = formatTime(currentTime);
                 if (this.timeTotalEl) this.timeTotalEl.textContent = formatTime(duration);
+
+                // Classic seek bar: track playback, unless the user is dragging it.
+                if (this.seekbarFillEl && !this._seekbarDragging && duration > 0) {
+                    this._updateSeekbar((currentTime / duration) * 100);
+                }
 
                 // Mirror progress into any external-mode WaveformPlayer
                 // instances tracking this URL — their canvases scrub in
@@ -1341,6 +1365,136 @@ export class WaveformBar {
                 this.shareBtnEl.setAttribute('title', 'Copy share link');
             }
         }, 1500);
+    }
+
+    /**
+     * Wire the classic seek bar (`waveform: false` mode): click/tap or drag to
+     * scrub, arrow keys to nudge. Drives the embedded player via seekToPercent /
+     * seekTo; the fill updates optimistically here and from onTimeUpdate.
+     * @private
+     */
+    _bindSeekbar() {
+        const seekToClientX = (clientX) => {
+            if (!this.player || !this.seekbarEl) return;
+            const rect = this.seekbarEl.getBoundingClientRect();
+            if (!(rect.width > 0)) return;
+            const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+            this.player.seekToPercent(pct);
+            this._updateSeekbar(pct * 100);
+        };
+
+        // Pointer drag — pointerdown starts the drag (a plain tap falls through
+        // to the trailing click), pointermove scrubs, pointerup/cancel ends it.
+        this.seekbarEl.addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            this._seekbarDragging = true;
+            try { this.seekbarEl.setPointerCapture(e.pointerId); } catch (err) {}
+        });
+        this.seekbarEl.addEventListener('pointermove', (e) => {
+            if (this._seekbarDragging) seekToClientX(e.clientX);
+        });
+        const endDrag = (e) => {
+            if (!this._seekbarDragging) return;
+            this._seekbarDragging = false;
+            try { this.seekbarEl.releasePointerCapture(e.pointerId); } catch (err) {}
+        };
+        this.seekbarEl.addEventListener('pointerup', endDrag);
+        this.seekbarEl.addEventListener('pointercancel', endDrag);
+        this.seekbarEl.addEventListener('click', (e) => seekToClientX(e.clientX));
+
+        // Keyboard: ←/→ nudge 5s, Home/End jump to the ends.
+        this.seekbarEl.addEventListener('keydown', (e) => {
+            if (!this.player || !this.player.audio) return;
+            const dur = this.player.audio.duration || 0;
+            if (!dur) return;
+            const cur = this.player.audio.currentTime || 0;
+            let next = null;
+            if (e.key === 'ArrowRight') next = Math.min(dur, cur + 5);
+            else if (e.key === 'ArrowLeft') next = Math.max(0, cur - 5);
+            else if (e.key === 'Home') next = 0;
+            else if (e.key === 'End') next = dur;
+            if (next !== null) {
+                e.preventDefault();
+                this.player.seekTo(next);
+                this._updateSeekbar((next / dur) * 100);
+            }
+        });
+    }
+
+    /**
+     * Position the classic seek bar's fill + handle + aria value.
+     * @param {number} percent - 0..100
+     * @private
+     */
+    _updateSeekbar(percent) {
+        const p = Math.max(0, Math.min(100, percent));
+        if (this.seekbarFillEl) this.seekbarFillEl.style.width = p + '%';
+        if (this.seekbarHandleEl) this.seekbarHandleEl.style.left = p + '%';
+        if (this.seekbarEl) this.seekbarEl.setAttribute('aria-valuenow', String(Math.round(p)));
+    }
+
+    /**
+     * Collapse the bar to a small floating pill (artwork + play + expand).
+     * @returns {WaveformBar}
+     */
+    collapse() {
+        this.isCollapsed = true;
+        if (this.barEl) this.barEl.classList.add('wb-collapsed');
+        this._updateCollapseButton();
+        this._saveCollapsed();
+        this._emit('collapse', {collapsed: true});
+        return this;
+    }
+
+    /**
+     * Restore the bar from its collapsed pill back to the full bar.
+     * @returns {WaveformBar}
+     */
+    expand() {
+        this.isCollapsed = false;
+        if (this.barEl) this.barEl.classList.remove('wb-collapsed');
+        this._updateCollapseButton();
+        this._saveCollapsed();
+        this._emit('collapse', {collapsed: false});
+        return this;
+    }
+
+    /**
+     * Toggle the collapsed pill state.
+     * @returns {WaveformBar}
+     */
+    toggleCollapse() {
+        return this.isCollapsed ? this.expand() : this.collapse();
+    }
+
+    /**
+     * Swap the collapse button's icon + labels for the current state.
+     * @private
+     */
+    _updateCollapseButton() {
+        if (!this.collapseBtnEl) return;
+        this.collapseBtnEl.innerHTML = this.isCollapsed ? ICONS.expand : ICONS.collapse;
+        const label = this.isCollapsed ? 'Expand' : 'Collapse';
+        this.collapseBtnEl.setAttribute('aria-label', label);
+        this.collapseBtnEl.setAttribute('title', label);
+    }
+
+    /** Persist the collapsed state (session-scoped) when persistence is on. @private */
+    _saveCollapsed() {
+        if (!this.config.persist) return;
+        try {
+            sessionStorage.setItem(this.config.storageKey + '-collapsed', this.isCollapsed ? '1' : '0');
+        } catch (e) {}
+    }
+
+    /** Read the persisted collapsed state. @returns {boolean} @private */
+    _readCollapsed() {
+        if (!this.config.persist) return false;
+        try {
+            return sessionStorage.getItem(this.config.storageKey + '-collapsed') === '1';
+        } catch (e) {
+            return false;
+        }
     }
 
     _loadCurrentTrack() {

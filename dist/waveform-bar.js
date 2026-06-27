@@ -8,6 +8,8 @@
     queue: '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>',
     share: '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>',
     music: '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" opacity="0.5"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55C7.79 13 6 14.79 6 17s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>',
+    collapse: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>',
+    expand: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>',
     volHigh: '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>',
     volLow: '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M18.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM5 9v6h4l5 5V4L9 9H5z"/></svg>',
     volMute: '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>',
@@ -194,8 +196,12 @@
         </div>
     </div>`;
     left += "</div>";
+    const seekbar = config.waveform ? "" : `<div class="wb-seekbar" role="slider" tabindex="0" aria-label="Seek" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <div class="wb-seekbar-track"><div class="wb-seekbar-fill"></div><div class="wb-seekbar-handle"></div></div>
+    </div>`;
     const centre = `<div class="wb-centre">
         <div class="wb-waveform-container"></div>
+        ${seekbar}
         <div class="wb-time"><span class="wb-time-current">0:00</span> / <span class="wb-time-total">0:00</span></div>
     </div>`;
     let right = '<div class="wb-right">';
@@ -229,7 +235,8 @@
       right += `<button class="wb-btn wb-btn-sm wb-queue-btn" aria-label="Queue" title="Queue">${ICONS.queue}</button>`;
     }
     right += "</div>";
-    return `<div class="wb-inner">${left}${centre}${right}</div>`;
+    const collapse = config.collapsible ? `<button class="wb-btn wb-btn-sm wb-collapse" aria-label="Collapse" title="Collapse">${ICONS.collapse}</button>` : "";
+    return `<div class="wb-inner">${left}${centre}${right}${collapse}</div>`;
   }
 
   // src/js/queue.js
@@ -337,6 +344,12 @@
     // true = content spans full width (lifts the 1400px cap)
     maxWidth: null,
     // custom content max-width (CSS value), e.g. '1200px'; overrides `wide`
+    position: "bottom",
+    // 'bottom' (default) or 'top' — which edge the bar docks to
+    collapsible: false,
+    // show a collapse button that shrinks the bar to a floating pill
+    waveform: true,
+    // false = classic Spotify-style seek bar instead of the waveform
     errorText: null,
     // custom "audio failed to load" message (null = player default)
     share: false,
@@ -536,6 +549,8 @@
       this._resolvedTheme = theme;
       const maxWidth = this.config.maxWidth || (this.config.wide ? "100%" : null);
       if (maxWidth) this.barEl.style.setProperty("--wb-max-width", maxWidth);
+      if (this.config.position === "top") this.barEl.classList.add("wb-top");
+      if (!this.config.waveform) this.barEl.classList.add("wb-classic");
       this.barEl.id = "waveform-bar";
       this.barEl.innerHTML = buildBarHTML(this.config);
       document.body.appendChild(this.barEl);
@@ -552,7 +567,16 @@
       this.cartBtnEl = this.barEl.querySelector(".wb-cart");
       this.timeCurrentEl = this.barEl.querySelector(".wb-time-current");
       this.timeTotalEl = this.barEl.querySelector(".wb-time-total");
+      this.seekbarEl = this.barEl.querySelector(".wb-seekbar");
+      this.seekbarFillEl = this.barEl.querySelector(".wb-seekbar-fill");
+      this.seekbarHandleEl = this.barEl.querySelector(".wb-seekbar-handle");
+      this.collapseBtnEl = this.barEl.querySelector(".wb-collapse");
       this.playBtnEl.addEventListener("click", () => this.togglePlay());
+      if (this.seekbarEl) this._bindSeekbar();
+      if (this.collapseBtnEl) {
+        this.collapseBtnEl.addEventListener("click", () => this.toggleCollapse());
+        if (this._readCollapsed()) this.collapse();
+      }
       const prevBtn = this.barEl.querySelector(".wb-prev");
       const nextBtn = this.barEl.querySelector(".wb-next");
       if (prevBtn) prevBtn.addEventListener("click", () => this.previous());
@@ -687,6 +711,9 @@
           this._lastPosition = currentTime;
           if (this.timeCurrentEl) this.timeCurrentEl.textContent = formatTime(currentTime);
           if (this.timeTotalEl) this.timeTotalEl.textContent = formatTime(duration);
+          if (this.seekbarFillEl && !this._seekbarDragging && duration > 0) {
+            this._updateSeekbar(currentTime / duration * 100);
+          }
           this._pumpExternalProgress(currentTime, duration);
           if (!this._lastSaveTime || currentTime - this._lastSaveTime > 2) {
             this._lastSaveTime = currentTime;
@@ -1385,6 +1412,130 @@
           this.shareBtnEl.setAttribute("title", "Copy share link");
         }
       }, 1500);
+    }
+    /**
+     * Wire the classic seek bar (`waveform: false` mode): click/tap or drag to
+     * scrub, arrow keys to nudge. Drives the embedded player via seekToPercent /
+     * seekTo; the fill updates optimistically here and from onTimeUpdate.
+     * @private
+     */
+    _bindSeekbar() {
+      const seekToClientX = (clientX) => {
+        if (!this.player || !this.seekbarEl) return;
+        const rect = this.seekbarEl.getBoundingClientRect();
+        if (!(rect.width > 0)) return;
+        const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+        this.player.seekToPercent(pct);
+        this._updateSeekbar(pct * 100);
+      };
+      this.seekbarEl.addEventListener("pointerdown", (e) => {
+        e.preventDefault();
+        this._seekbarDragging = true;
+        try {
+          this.seekbarEl.setPointerCapture(e.pointerId);
+        } catch (err) {
+        }
+      });
+      this.seekbarEl.addEventListener("pointermove", (e) => {
+        if (this._seekbarDragging) seekToClientX(e.clientX);
+      });
+      const endDrag = (e) => {
+        if (!this._seekbarDragging) return;
+        this._seekbarDragging = false;
+        try {
+          this.seekbarEl.releasePointerCapture(e.pointerId);
+        } catch (err) {
+        }
+      };
+      this.seekbarEl.addEventListener("pointerup", endDrag);
+      this.seekbarEl.addEventListener("pointercancel", endDrag);
+      this.seekbarEl.addEventListener("click", (e) => seekToClientX(e.clientX));
+      this.seekbarEl.addEventListener("keydown", (e) => {
+        if (!this.player || !this.player.audio) return;
+        const dur = this.player.audio.duration || 0;
+        if (!dur) return;
+        const cur = this.player.audio.currentTime || 0;
+        let next = null;
+        if (e.key === "ArrowRight") next = Math.min(dur, cur + 5);
+        else if (e.key === "ArrowLeft") next = Math.max(0, cur - 5);
+        else if (e.key === "Home") next = 0;
+        else if (e.key === "End") next = dur;
+        if (next !== null) {
+          e.preventDefault();
+          this.player.seekTo(next);
+          this._updateSeekbar(next / dur * 100);
+        }
+      });
+    }
+    /**
+     * Position the classic seek bar's fill + handle + aria value.
+     * @param {number} percent - 0..100
+     * @private
+     */
+    _updateSeekbar(percent) {
+      const p = Math.max(0, Math.min(100, percent));
+      if (this.seekbarFillEl) this.seekbarFillEl.style.width = p + "%";
+      if (this.seekbarHandleEl) this.seekbarHandleEl.style.left = p + "%";
+      if (this.seekbarEl) this.seekbarEl.setAttribute("aria-valuenow", String(Math.round(p)));
+    }
+    /**
+     * Collapse the bar to a small floating pill (artwork + play + expand).
+     * @returns {WaveformBar}
+     */
+    collapse() {
+      this.isCollapsed = true;
+      if (this.barEl) this.barEl.classList.add("wb-collapsed");
+      this._updateCollapseButton();
+      this._saveCollapsed();
+      this._emit("collapse", { collapsed: true });
+      return this;
+    }
+    /**
+     * Restore the bar from its collapsed pill back to the full bar.
+     * @returns {WaveformBar}
+     */
+    expand() {
+      this.isCollapsed = false;
+      if (this.barEl) this.barEl.classList.remove("wb-collapsed");
+      this._updateCollapseButton();
+      this._saveCollapsed();
+      this._emit("collapse", { collapsed: false });
+      return this;
+    }
+    /**
+     * Toggle the collapsed pill state.
+     * @returns {WaveformBar}
+     */
+    toggleCollapse() {
+      return this.isCollapsed ? this.expand() : this.collapse();
+    }
+    /**
+     * Swap the collapse button's icon + labels for the current state.
+     * @private
+     */
+    _updateCollapseButton() {
+      if (!this.collapseBtnEl) return;
+      this.collapseBtnEl.innerHTML = this.isCollapsed ? ICONS.expand : ICONS.collapse;
+      const label = this.isCollapsed ? "Expand" : "Collapse";
+      this.collapseBtnEl.setAttribute("aria-label", label);
+      this.collapseBtnEl.setAttribute("title", label);
+    }
+    /** Persist the collapsed state (session-scoped) when persistence is on. @private */
+    _saveCollapsed() {
+      if (!this.config.persist) return;
+      try {
+        sessionStorage.setItem(this.config.storageKey + "-collapsed", this.isCollapsed ? "1" : "0");
+      } catch (e) {
+      }
+    }
+    /** Read the persisted collapsed state. @returns {boolean} @private */
+    _readCollapsed() {
+      if (!this.config.persist) return false;
+      try {
+        return sessionStorage.getItem(this.config.storageKey + "-collapsed") === "1";
+      } catch (e) {
+        return false;
+      }
     }
     _loadCurrentTrack() {
       const track = this.getCurrentTrack();

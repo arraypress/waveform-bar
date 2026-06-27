@@ -277,3 +277,65 @@ describe('shareable timestamps', () => {
 		history.replaceState({}, '', '/');
 	});
 });
+
+describe('layout modes: position / classic / collapse', () => {
+	it('docks to the top edge when position:"top"', () => {
+		const bar = makeBar({ persist: false, position: 'top' });
+		expect(bar.barEl.classList.contains('wb-top')).toBe(true);
+	});
+
+	it('classic mode hides the waveform and renders a seek bar', () => {
+		const bar = makeBar({ persist: false, waveform: false });
+		expect(bar.barEl.classList.contains('wb-classic')).toBe(true);
+		expect(bar.barEl.querySelector('.wb-seekbar')).toBeTruthy();
+		expect(bar.seekbarFillEl).toBeTruthy();
+	});
+
+	it('renders no seek bar in the default waveform mode', () => {
+		const bar = makeBar({ persist: false });
+		expect(bar.barEl.classList.contains('wb-classic')).toBe(false);
+		expect(bar.barEl.querySelector('.wb-seekbar')).toBe(null);
+	});
+
+	it('_updateSeekbar positions the fill + handle + aria (clamped)', () => {
+		const bar = makeBar({ persist: false, waveform: false });
+		bar._updateSeekbar(42);
+		expect(bar.seekbarFillEl.style.width).toBe('42%');
+		expect(bar.seekbarHandleEl.style.left).toBe('42%');
+		expect(bar.seekbarEl.getAttribute('aria-valuenow')).toBe('42');
+		bar._updateSeekbar(999);
+		expect(bar.seekbarFillEl.style.width).toBe('100%');
+	});
+
+	it('collapse/expand toggles the pill class and emits waveformbar:collapse', () => {
+		const bar = makeBar({ persist: false, collapsible: true });
+		const btn = bar.barEl.querySelector('.wb-collapse');
+		expect(btn).toBeTruthy();
+		let last = null;
+		const onCollapse = (e) => { last = e.detail.collapsed; };
+		document.addEventListener('waveformbar:collapse', onCollapse);
+
+		btn.click();
+		expect(bar.isCollapsed).toBe(true);
+		expect(bar.barEl.classList.contains('wb-collapsed')).toBe(true);
+		expect(last).toBe(true);
+
+		btn.click();
+		expect(bar.barEl.classList.contains('wb-collapsed')).toBe(false);
+		expect(last).toBe(false);
+
+		document.removeEventListener('waveformbar:collapse', onCollapse);
+	});
+
+	it('restores a persisted collapsed state on init', () => {
+		sessionStorage.setItem('waveform-bar-collapsed', '1');
+		const bar = makeBar({ persist: true, collapsible: true });
+		expect(bar.isCollapsed).toBe(true);
+		expect(bar.barEl.classList.contains('wb-collapsed')).toBe(true);
+	});
+
+	it('shows no collapse button unless collapsible:true', () => {
+		const bar = makeBar({ persist: false });
+		expect(bar.barEl.querySelector('.wb-collapse')).toBe(null);
+	});
+});
