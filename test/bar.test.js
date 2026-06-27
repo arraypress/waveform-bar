@@ -339,3 +339,70 @@ describe('layout modes: position / classic / collapse', () => {
 		expect(bar.barEl.querySelector('.wb-collapse')).toBe(null);
 	});
 });
+
+describe('expandable now-playing panel', () => {
+	it('builds the panel + marks the bar expandable', () => {
+		const bar = makeBar({ persist: false, expandable: true });
+		expect(bar.barEl.classList.contains('wb-expandable')).toBe(true);
+		expect(bar.panelEl).toBeTruthy();
+		expect(document.querySelector('.wb-panel')).toBeTruthy();
+	});
+
+	it('builds no panel unless expandable', () => {
+		const bar = makeBar({ persist: false });
+		expect(bar.panelEl == null).toBe(true);
+		expect(document.querySelector('.wb-panel')).toBe(null);
+	});
+
+	it('clicking the artwork opens the panel and relocates the waveform', () => {
+		const bar = makeBar({ persist: false, expandable: true });
+		bar.barEl.querySelector('.wb-artwork').click();
+		expect(bar.isPanelOpen).toBe(true);
+		expect(bar.panelEl.classList.contains('wb-panel-active')).toBe(true);
+		expect(bar.panelStageEl.contains(bar.waveformContainer)).toBe(true);
+	});
+
+	it('collapsePanel returns the waveform to the bar', () => {
+		const bar = makeBar({ persist: false, expandable: true });
+		bar.expandPanel();
+		bar.collapsePanel();
+		expect(bar.isPanelOpen).toBe(false);
+		expect(bar.centreEl.contains(bar.waveformContainer)).toBe(true);
+		expect(bar.panelEl.classList.contains('wb-panel-active')).toBe(false);
+	});
+
+	it('syncs the current track into the panel on open', () => {
+		document.body.innerHTML =
+			'<button data-wb-play data-wb-url="a.mp3" data-wb-title="Song A" data-wb-artist="Artist A">Play</button>';
+		const bar = makeBar({ persist: false, expandable: true });
+		document.querySelector('[data-wb-play]').click();
+		bar.expandPanel();
+		expect(bar.panelTitleEl.textContent).toBe('Song A');
+		expect(bar.panelArtistEl.textContent).toBe('Artist A');
+	});
+
+	it('Escape closes the panel', () => {
+		const bar = makeBar({ persist: false, expandable: true });
+		bar.expandPanel();
+		expect(bar.isPanelOpen).toBe(true);
+		document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+		expect(bar.isPanelOpen).toBe(false);
+	});
+
+	it('the panel play button toggles playback', () => {
+		const bar = makeBar({ persist: false, expandable: true });
+		const spy = vi.spyOn(bar, 'togglePlay');
+		bar.panelEl.querySelector('.wb-panel-play').click();
+		expect(spy).toHaveBeenCalled();
+	});
+
+	it('destroy removes the panel + Escape listener', () => {
+		const bar = makeBar({ persist: false, expandable: true });
+		bar.expandPanel();
+		bar.destroy();
+		expect(document.querySelector('.wb-panel')).toBe(null);
+		// A stray Escape after teardown must not throw or reopen anything.
+		document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+		expect(bar.isPanelOpen).toBe(false);
+	});
+});

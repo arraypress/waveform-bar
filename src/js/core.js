@@ -14,7 +14,7 @@ import {
     restoreFavorites
 } from './storage.js';
 import {fireAction} from './actions.js';
-import {buildBarHTML} from './dom.js';
+import {buildBarHTML, buildPanelHTML} from './dom.js';
 import {createQueuePanel, renderQueue} from './queue.js';
 
 /**
@@ -41,6 +41,7 @@ const DEFAULTS = {
     position: 'bottom',     // 'bottom' (default) or 'top' — which edge the bar docks to
     collapsible: false,     // show a collapse button that shrinks the bar to a floating pill
     waveform: true,         // false = classic Spotify-style seek bar instead of the waveform
+    expandable: false,      // click the artwork to open a full now-playing panel (art + waveform + queue)
     errorText: null,        // custom "audio failed to load" message (null = player default)
     share: false,           // show a "copy share link" button (emits ?<shareParam>=<seconds>)
     shareParam: 'wt',       // URL query param for the shared timestamp (seconds)
@@ -201,6 +202,10 @@ export class WaveformBar {
             document.removeEventListener('click', this._docClickQueue);
             this._docClickQueue = null;
         }
+        if (this._panelKeydown) {
+            document.removeEventListener('keydown', this._panelKeydown);
+            this._panelKeydown = null;
+        }
         // Single delegated trigger listener (replaces per-element binding).
         if (this._docClickTriggers) {
             document.removeEventListener('click', this._docClickTriggers);
@@ -240,6 +245,12 @@ export class WaveformBar {
             this.queueEl.remove();
             this.queueEl = null;
         }
+        if (this.panelEl) {
+            this.panelEl.remove();
+            this.panelEl = null;
+        }
+        this.isPanelOpen = false;
+        document.body.classList.remove('wb-panel-lock');
         if (this._observer) {
             this._observer.disconnect();
             this._observer = null;
@@ -266,6 +277,16 @@ export class WaveformBar {
         this.cartBtnEl = null;
         this.timeCurrentEl = null;
         this.timeTotalEl = null;
+        this.centreEl = null;
+        this.artworkEl = null;
+        this.panelStageEl = null;
+        this.panelArtEl = null;
+        this.panelTitleEl = null;
+        this.panelArtistEl = null;
+        this.panelCurrentEl = null;
+        this.panelTotalEl = null;
+        this.panelPlayEl = null;
+        this.panelQueueBodyEl = null;
 
         document.querySelectorAll('.wb-current,.wb-playing').forEach(el => el.classList.remove('wb-current', 'wb-playing'));
 
@@ -323,6 +344,8 @@ export class WaveformBar {
         this.seekbarFillEl = this.barEl.querySelector('.wb-seekbar-fill');
         this.seekbarHandleEl = this.barEl.querySelector('.wb-seekbar-handle');
         this.collapseBtnEl = this.barEl.querySelector('.wb-collapse');
+        this.centreEl = this.barEl.querySelector('.wb-centre');
+        this.artworkEl = this.barEl.querySelector('.wb-artwork');
 
         // Bind controls
         this.playBtnEl.addEventListener('click', () => this.togglePlay());
@@ -332,6 +355,19 @@ export class WaveformBar {
         if (this.collapseBtnEl) {
             this.collapseBtnEl.addEventListener('click', () => this.toggleCollapse());
             if (this._readCollapsed()) this.collapse();
+        }
+
+        // Expandable now-playing panel: click the artwork to open it.
+        if (this.config.expandable) {
+            this.barEl.classList.add('wb-expandable');
+            this._createPanel();
+            if (this.artworkEl) {
+                this.artworkEl.setAttribute('title', 'Expand');
+                this.artworkEl.addEventListener('click', (e) => {
+                    e.stopPropagation();   // don't also trigger showTrackLink navigation
+                    this.expandPanel();
+                });
+            }
         }
 
         const prevBtn = this.barEl.querySelector('.wb-prev');
@@ -512,6 +548,12 @@ export class WaveformBar {
                 // Classic seek bar: track playback, unless the user is dragging it.
                 if (this.seekbarFillEl && !this._seekbarDragging && duration > 0) {
                     this._updateSeekbar((currentTime / duration) * 100);
+                }
+
+                // Now-playing panel time readout.
+                if (this.isPanelOpen) {
+                    if (this.panelCurrentEl) this.panelCurrentEl.textContent = formatTime(currentTime);
+                    if (this.panelTotalEl) this.panelTotalEl.textContent = formatTime(duration);
                 }
 
                 // Mirror progress into any external-mode WaveformPlayer
@@ -1497,6 +1539,134 @@ export class WaveformBar {
         }
     }
 
+    /**
+     * Build the now-playing panel once: append it to the body, cache refs, and
+     * bind close / overlay / transport / Escape handlers. The bar's waveform is
+     * relocated into `.wb-panel-stage` while open (see expandPanel).
+     * @private
+     */
+    _createPanel() {
+        this.panelEl = document.createElement('div');
+        this.panelEl.className = 'wb-panel';
+        if (this._resolvedTheme === 'light') this.panelEl.classList.add('wb-light');
+        this.panelEl.innerHTML = buildPanelHTML(this.config);
+        document.body.appendChild(this.panelEl);
+
+        this.panelStageEl = this.panelEl.querySelector('.wb-panel-stage');
+        this.panelArtEl = this.panelEl.querySelector('.wb-panel-art');
+        this.panelTitleEl = this.panelEl.querySelector('.wb-panel-title');
+        this.panelArtistEl = this.panelEl.querySelector('.wb-panel-artist');
+        this.panelCurrentEl = this.panelEl.querySelector('.wb-panel-current');
+        this.panelTotalEl = this.panelEl.querySelector('.wb-panel-total');
+        this.panelPlayEl = this.panelEl.querySelector('.wb-panel-play');
+        this.panelQueueBodyEl = this.panelEl.querySelector('.wb-panel-queue-body');
+
+        this.panelEl.querySelector('.wb-panel-close').addEventListener('click', () => this.collapsePanel());
+        this.panelEl.querySelector('.wb-panel-overlay').addEventListener('click', () => this.collapsePanel());
+        if (this.panelPlayEl) this.panelPlayEl.addEventListener('click', () => this.togglePlay());
+        const prev = this.panelEl.querySelector('.wb-panel-prev');
+        const next = this.panelEl.querySelector('.wb-panel-next');
+        if (prev) prev.addEventListener('click', () => this.previous());
+        if (next) next.addEventListener('click', () => this.next());
+
+        // Escape closes the panel. Stored on `this` so destroy() can remove it.
+        this._panelKeydown = (e) => {
+            if (e.key === 'Escape' && this.isPanelOpen) this.collapsePanel();
+        };
+        document.addEventListener('keydown', this._panelKeydown);
+    }
+
+    /**
+     * Open the now-playing panel: relocate the waveform into the panel stage
+     * (same player — keeps playing, its ResizeObserver redraws it bigger), sync
+     * the panel contents, and reveal it.
+     * @returns {WaveformBar}
+     */
+    expandPanel() {
+        if (!this.panelEl || this.isPanelOpen) return this;
+        this.isPanelOpen = true;
+
+        // Reveal first so the stage has layout, then move the live waveform in.
+        this.panelEl.classList.add('wb-panel-active');
+        if (this.waveformContainer && this.panelStageEl) {
+            this.panelStageEl.appendChild(this.waveformContainer);
+        }
+        this._syncPanel();
+        document.body.classList.add('wb-panel-lock');
+        this._emit('panelopen', {track: this.getCurrentTrack()});
+        return this;
+    }
+
+    /**
+     * Close the panel and move the waveform back into the bar.
+     * @returns {WaveformBar}
+     */
+    collapsePanel() {
+        if (!this.panelEl || !this.isPanelOpen) return this;
+        this.isPanelOpen = false;
+
+        // Return the waveform to the bar's centre (ahead of the seek bar / time).
+        if (this.waveformContainer && this.centreEl) {
+            this.centreEl.insertBefore(this.waveformContainer, this.centreEl.firstChild);
+        }
+        this.panelEl.classList.remove('wb-panel-active');
+        document.body.classList.remove('wb-panel-lock');
+        this._emit('panelclose', {track: this.getCurrentTrack()});
+        return this;
+    }
+
+    /**
+     * Toggle the now-playing panel.
+     * @returns {WaveformBar}
+     */
+    togglePanel() {
+        return this.isPanelOpen ? this.collapsePanel() : this.expandPanel();
+    }
+
+    /**
+     * Mirror the current track + play state + queue into the panel.
+     * @private
+     */
+    _syncPanel() {
+        if (!this.panelEl) return;
+        const track = this.getCurrentTrack();
+        if (this.panelTitleEl) this.panelTitleEl.textContent = (track && track.title) || 'No track selected';
+        if (this.panelArtistEl) this.panelArtistEl.textContent = (track && track.artist) || '';
+        if (this.panelArtEl) {
+            const art = (track && track.artwork) || this.config.defaultArtwork;
+            this.panelArtEl.innerHTML = art
+                ? `<img src="${escapeHtml(art)}" alt="${escapeHtml((track && track.title) || '')}" />`
+                : ICONS.music;
+        }
+        this._updatePanelPlayButton();
+        this._renderPanelQueue();
+    }
+
+    /**
+     * Swap the panel play/pause icons to match playback state.
+     * @private
+     */
+    _updatePanelPlayButton() {
+        if (!this.panelPlayEl) return;
+        const play = this.panelPlayEl.querySelector('.wb-panel-icon-play');
+        const pause = this.panelPlayEl.querySelector('.wb-panel-icon-pause');
+        if (play) play.style.display = this.isPlaying ? 'none' : 'block';
+        if (pause) pause.style.display = this.isPlaying ? 'block' : 'none';
+        this.panelPlayEl.title = this.isPlaying ? 'Pause' : 'Play';
+    }
+
+    /**
+     * Render the queue into the panel list (reuses the shared renderQueue).
+     * @private
+     */
+    _renderPanelQueue() {
+        if (!this.panelQueueBodyEl) return;
+        renderQueue(this.panelQueueBodyEl, null, this.queue, this.currentIndex, {
+            onSkipTo: (i) => this.skipTo(i),
+            onRemove: (i) => this.removeFromQueue(i)
+        });
+    }
+
     _loadCurrentTrack() {
         const track = this.getCurrentTrack();
         if (!track || !this.player) return;
@@ -1574,6 +1744,9 @@ export class WaveformBar {
         // Reset time
         if (this.timeCurrentEl) this.timeCurrentEl.textContent = '0:00';
         if (this.timeTotalEl) this.timeTotalEl.textContent = '0:00';
+
+        // Keep an open now-playing panel in sync with the new track.
+        if (this.isPanelOpen) this._syncPanel();
     }
 
     /**
@@ -1622,6 +1795,7 @@ export class WaveformBar {
         if (play) play.style.display = this.isPlaying ? 'none' : 'block';
         if (pause) pause.style.display = this.isPlaying ? 'block' : 'none';
         this.playBtnEl.title = this.isPlaying ? 'Pause' : 'Play';
+        this._updatePanelPlayButton();
     }
 
     _updateNavButtons() {
@@ -1812,6 +1986,7 @@ export class WaveformBar {
             onSkipTo: (i) => this.skipTo(i),
             onRemove: (i) => this.removeFromQueue(i)
         });
+        this._renderPanelQueue();
     }
 
     // =====================================================================
