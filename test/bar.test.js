@@ -284,27 +284,15 @@ describe('layout modes: position / classic / collapse', () => {
 		expect(bar.barEl.classList.contains('wb-top')).toBe(true);
 	});
 
-	it('classic mode hides the waveform and renders a seek bar', () => {
+	it("classic mode (waveform:false) uses the player's built-in seekbar style", () => {
 		const bar = makeBar({ persist: false, waveform: false });
-		expect(bar.barEl.classList.contains('wb-classic')).toBe(true);
-		expect(bar.barEl.querySelector('.wb-seekbar')).toBeTruthy();
-		expect(bar.seekbarFillEl).toBeTruthy();
+		expect(MockPlayer.last.options.waveformStyle).toBe('seekbar');
+		expect(bar.barEl.querySelector('.wb-seekbar')).toBe(null);   // no custom seek-bar DOM
 	});
 
-	it('renders no seek bar in the default waveform mode', () => {
+	it('default waveform mode passes the configured style through to the player', () => {
 		const bar = makeBar({ persist: false });
-		expect(bar.barEl.classList.contains('wb-classic')).toBe(false);
-		expect(bar.barEl.querySelector('.wb-seekbar')).toBe(null);
-	});
-
-	it('_updateSeekbar positions the fill + handle + aria (clamped)', () => {
-		const bar = makeBar({ persist: false, waveform: false });
-		bar._updateSeekbar(42);
-		expect(bar.seekbarFillEl.style.width).toBe('42%');
-		expect(bar.seekbarHandleEl.style.left).toBe('42%');
-		expect(bar.seekbarEl.getAttribute('aria-valuenow')).toBe('42');
-		bar._updateSeekbar(999);
-		expect(bar.seekbarFillEl.style.width).toBe('100%');
+		expect(MockPlayer.last.options.waveformStyle).toBe('mirror');  // DEFAULTS.waveformStyle
 	});
 
 	it('collapse/expand toggles the pill class and emits waveformbar:collapse', () => {

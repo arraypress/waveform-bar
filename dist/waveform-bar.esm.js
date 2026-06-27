@@ -195,12 +195,8 @@ function buildBarHTML(config) {
         </div>
     </div>`;
   left += "</div>";
-  const seekbar = config.waveform ? "" : `<div class="wb-seekbar" role="slider" tabindex="0" aria-label="Seek" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-        <div class="wb-seekbar-track"><div class="wb-seekbar-fill"></div><div class="wb-seekbar-handle"></div></div>
-    </div>`;
   const centre = `<div class="wb-centre">
         <div class="wb-waveform-container"></div>
-        ${seekbar}
         <div class="wb-time"><span class="wb-time-current">0:00</span> / <span class="wb-time-total">0:00</span></div>
     </div>`;
   let right = '<div class="wb-right">';
@@ -598,7 +594,6 @@ var WaveformBar = class {
     const maxWidth = this.config.maxWidth || (this.config.wide ? "100%" : null);
     if (maxWidth) this.barEl.style.setProperty("--wb-max-width", maxWidth);
     if (this.config.position === "top") this.barEl.classList.add("wb-top");
-    if (!this.config.waveform) this.barEl.classList.add("wb-classic");
     this.barEl.id = "waveform-bar";
     this.barEl.innerHTML = buildBarHTML(this.config);
     document.body.appendChild(this.barEl);
@@ -615,14 +610,10 @@ var WaveformBar = class {
     this.cartBtnEl = this.barEl.querySelector(".wb-cart");
     this.timeCurrentEl = this.barEl.querySelector(".wb-time-current");
     this.timeTotalEl = this.barEl.querySelector(".wb-time-total");
-    this.seekbarEl = this.barEl.querySelector(".wb-seekbar");
-    this.seekbarFillEl = this.barEl.querySelector(".wb-seekbar-fill");
-    this.seekbarHandleEl = this.barEl.querySelector(".wb-seekbar-handle");
     this.collapseBtnEl = this.barEl.querySelector(".wb-collapse");
     this.centreEl = this.barEl.querySelector(".wb-centre");
     this.artworkEl = this.barEl.querySelector(".wb-artwork");
     this.playBtnEl.addEventListener("click", () => this.togglePlay());
-    if (this.seekbarEl) this._bindSeekbar();
     if (this.collapseBtnEl) {
       this.collapseBtnEl.addEventListener("click", () => this.toggleCollapse());
       if (this._readCollapsed()) this.collapse();
@@ -708,7 +699,10 @@ var WaveformBar = class {
     const opts = {
       showControls: false,
       showInfo: false,
-      waveformStyle: this.config.waveformStyle,
+      // Classic mode reuses the player's own built-in 'seekbar' style —
+      // a simple rounded progress bar (no waveform), with the player's
+      // native click-to-seek. No custom seek-bar DOM needed.
+      waveformStyle: this.config.waveform === false ? "seekbar" : this.config.waveformStyle,
       height: this.config.waveformHeight,
       barWidth: this.config.barWidth,
       barSpacing: this.config.barSpacing,
@@ -772,9 +766,6 @@ var WaveformBar = class {
         this._lastPosition = currentTime;
         if (this.timeCurrentEl) this.timeCurrentEl.textContent = formatTime(currentTime);
         if (this.timeTotalEl) this.timeTotalEl.textContent = formatTime(duration);
-        if (this.seekbarFillEl && !this._seekbarDragging && duration > 0) {
-          this._updateSeekbar(currentTime / duration * 100);
-        }
         if (this.isPanelOpen) {
           if (this.panelCurrentEl) this.panelCurrentEl.textContent = formatTime(currentTime);
           if (this.panelTotalEl) this.panelTotalEl.textContent = formatTime(duration);
@@ -1479,71 +1470,6 @@ var WaveformBar = class {
     }, 1500);
   }
   /**
-   * Wire the classic seek bar (`waveform: false` mode): click/tap or drag to
-   * scrub, arrow keys to nudge. Drives the embedded player via seekToPercent /
-   * seekTo; the fill updates optimistically here and from onTimeUpdate.
-   * @private
-   */
-  _bindSeekbar() {
-    const seekToClientX = (clientX) => {
-      if (!this.player || !this.seekbarEl) return;
-      const rect = this.seekbarEl.getBoundingClientRect();
-      if (!(rect.width > 0)) return;
-      const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-      this.player.seekToPercent(pct);
-      this._updateSeekbar(pct * 100);
-    };
-    this.seekbarEl.addEventListener("pointerdown", (e) => {
-      e.preventDefault();
-      this._seekbarDragging = true;
-      try {
-        this.seekbarEl.setPointerCapture(e.pointerId);
-      } catch (err) {
-      }
-    });
-    this.seekbarEl.addEventListener("pointermove", (e) => {
-      if (this._seekbarDragging) seekToClientX(e.clientX);
-    });
-    const endDrag = (e) => {
-      if (!this._seekbarDragging) return;
-      this._seekbarDragging = false;
-      try {
-        this.seekbarEl.releasePointerCapture(e.pointerId);
-      } catch (err) {
-      }
-    };
-    this.seekbarEl.addEventListener("pointerup", endDrag);
-    this.seekbarEl.addEventListener("pointercancel", endDrag);
-    this.seekbarEl.addEventListener("click", (e) => seekToClientX(e.clientX));
-    this.seekbarEl.addEventListener("keydown", (e) => {
-      if (!this.player || !this.player.audio) return;
-      const dur = this.player.audio.duration || 0;
-      if (!dur) return;
-      const cur = this.player.audio.currentTime || 0;
-      let next = null;
-      if (e.key === "ArrowRight") next = Math.min(dur, cur + 5);
-      else if (e.key === "ArrowLeft") next = Math.max(0, cur - 5);
-      else if (e.key === "Home") next = 0;
-      else if (e.key === "End") next = dur;
-      if (next !== null) {
-        e.preventDefault();
-        this.player.seekTo(next);
-        this._updateSeekbar(next / dur * 100);
-      }
-    });
-  }
-  /**
-   * Position the classic seek bar's fill + handle + aria value.
-   * @param {number} percent - 0..100
-   * @private
-   */
-  _updateSeekbar(percent) {
-    const p = Math.max(0, Math.min(100, percent));
-    if (this.seekbarFillEl) this.seekbarFillEl.style.width = p + "%";
-    if (this.seekbarHandleEl) this.seekbarHandleEl.style.left = p + "%";
-    if (this.seekbarEl) this.seekbarEl.setAttribute("aria-valuenow", String(Math.round(p)));
-  }
-  /**
    * Collapse the bar to a small floating pill (artwork + play + expand).
    * @returns {WaveformBar}
    */
@@ -1646,6 +1572,7 @@ var WaveformBar = class {
     this.panelEl.classList.add("wb-panel-active");
     if (this.waveformContainer && this.panelStageEl) {
       this.panelStageEl.appendChild(this.waveformContainer);
+      this._resizePlayer(96);
     }
     this._syncPanel();
     document.body.classList.add("wb-panel-lock");
@@ -1661,6 +1588,7 @@ var WaveformBar = class {
     this.isPanelOpen = false;
     if (this.waveformContainer && this.centreEl) {
       this.centreEl.insertBefore(this.waveformContainer, this.centreEl.firstChild);
+      this._resizePlayer(this.config.waveformHeight);
     }
     this.panelEl.classList.remove("wb-panel-active");
     document.body.classList.remove("wb-panel-lock");
@@ -1673,6 +1601,21 @@ var WaveformBar = class {
    */
   togglePanel() {
     return this.isPanelOpen ? this.collapsePanel() : this.expandPanel();
+  }
+  /**
+   * Resize the embedded player's canvas to a new height and force a redraw at
+   * the current container width. Called when the waveform is relocated between
+   * the bar and the now-playing panel — a DOM move doesn't reliably trip the
+   * player's ResizeObserver, so we drive resizeCanvas() explicitly.
+   * @param {number} height
+   * @private
+   */
+  _resizePlayer(height) {
+    if (!this.player) return;
+    if (typeof height === "number" && this.player.options) {
+      this.player.options.height = height;
+    }
+    if (typeof this.player.resizeCanvas === "function") this.player.resizeCanvas();
   }
   /**
    * Mirror the current track + play state + queue into the panel.

@@ -967,66 +967,6 @@
 }
 
 /* ==========================================================================
-   Classic mode — Spotify-style seek bar (waveform: false)
-   ========================================================================== */
-
-.wb-classic .wb-waveform-container {
-    display: none;
-}
-
-.wb-seekbar {
-    flex: 1;
-    min-width: 0;
-    height: 24px;               /* generous hit area; the visible track is thin */
-    display: flex;
-    align-items: center;
-    cursor: pointer;
-    touch-action: none;         /* let pointer-drag scrub without the page panning */
-}
-
-.wb-seekbar:focus-visible {
-    outline: 2px solid var(--wb-accent);
-    outline-offset: 4px;
-    border-radius: 4px;
-}
-
-.wb-seekbar-track {
-    position: relative;
-    width: 100%;
-    height: 4px;
-    border-radius: 999px;
-    background: var(--wb-hover);
-}
-
-.wb-seekbar-fill {
-    position: absolute;
-    top: 0;
-    left: 0;
-    height: 100%;
-    width: 0;
-    border-radius: 999px;
-    background: var(--wb-accent);
-}
-
-.wb-seekbar-handle {
-    position: absolute;
-    top: 50%;
-    left: 0;
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    background: var(--wb-accent);
-    transform: translate(-50%, -50%);
-    opacity: 0;
-    transition: opacity 0.15s;
-}
-
-.wb-seekbar:hover .wb-seekbar-handle,
-.wb-seekbar:focus-visible .wb-seekbar-handle {
-    opacity: 1;
-}
-
-/* ==========================================================================
    Collapse-to-pill (collapsible: true)
    ========================================================================== */
 
@@ -1191,15 +1131,15 @@ body.wb-panel-lock {
 
 .wb-panel-stage {
     width: 100%;
-    min-height: 64px;
+    min-height: 96px;
     display: flex;
     align-items: center;
 }
 
-/* The relocated player fills the stage. */
+/* The relocated player fills the stage; the player sets its own canvas height
+   (bumped to 96px while in the panel — see _resizePlayer). */
 .wb-panel-stage .wb-waveform-container {
     width: 100%;
-    height: 64px;
 }
 
 .wb-panel-time {

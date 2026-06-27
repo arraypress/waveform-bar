@@ -39,16 +39,11 @@ export function buildBarHTML(config) {
     </div>`;
     left += '</div>';
 
-    // --- Centre zone: waveform (or a classic seek bar) + time ---
-    // The waveform container is always rendered so the embedded player has a
-    // mount point; in classic mode (`waveform: false`) CSS hides it via the
-    // `.wb-classic` bar class and the seek bar takes over.
-    const seekbar = config.waveform ? '' : `<div class="wb-seekbar" role="slider" tabindex="0" aria-label="Seek" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-        <div class="wb-seekbar-track"><div class="wb-seekbar-fill"></div><div class="wb-seekbar-handle"></div></div>
-    </div>`;
+    // --- Centre zone: waveform + time ---
+    // In classic mode (`waveform: false`) the embedded player renders its own
+    // built-in 'seekbar' style into this same container (see _initPlayer).
     const centre = `<div class="wb-centre">
         <div class="wb-waveform-container"></div>
-        ${seekbar}
         <div class="wb-time"><span class="wb-time-current">0:00</span> / <span class="wb-time-total">0:00</span></div>
     </div>`;
 
