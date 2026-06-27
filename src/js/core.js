@@ -39,6 +39,8 @@ const DEFAULTS = {
     wide: false,            // true = content spans full width (lifts the 1400px cap)
     maxWidth: null,         // custom content max-width (CSS value), e.g. '1200px'; overrides `wide`
     errorText: null,        // custom "audio failed to load" message (null = player default)
+    share: false,           // show a "copy share link" button (emits ?<shareParam>=<seconds>)
+    shareParam: 'wt',       // URL query param for the shared timestamp (seconds)
     waveformStyle: 'mirror',
     waveformHeight: 32,
     barWidth: 2,
@@ -127,6 +129,10 @@ export class WaveformBar {
         const v = Number(this.config.volume);
         this.volume = Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 1;
 
+        // Shareable timestamp: a `?<shareParam>=<seconds>` in the URL seeks the
+        // first-loaded track to that position (applied once in the player onLoad).
+        this._shareSeek = this._readShareSeek();
+
         if (typeof window.WaveformPlayer === 'undefined') {
             console.error('[WaveformBar] WaveformPlayer is required.');
             return this;
@@ -203,6 +209,8 @@ export class WaveformBar {
             clearTimeout(this._restoreSeekTimeout);
             this._restoreSeekTimeout = null;
         }
+        clearTimeout(this._shareFlashTimeout);
+        this._shareFlashTimeout = null;
         // Invalidate any in-flight load continuation.
         this._loadSeq++;
 
@@ -281,6 +289,7 @@ export class WaveformBar {
         this.playBtnEl = this.barEl.querySelector('.wb-play');
         this.waveformContainer = this.barEl.querySelector('.wb-waveform-container');
         this.queueBtnEl = this.barEl.querySelector('.wb-queue-btn');
+        this.shareBtnEl = this.barEl.querySelector('.wb-share');
         this.muteBtnEl = this.barEl.querySelector('.wb-mute');
         this.volumeSliderEl = this.barEl.querySelector('.wb-volume-slider');
         this.favBtnEl = this.barEl.querySelector('.wb-fav');
@@ -295,6 +304,7 @@ export class WaveformBar {
         const nextBtn = this.barEl.querySelector('.wb-next');
         if (prevBtn) prevBtn.addEventListener('click', () => this.previous());
         if (nextBtn) nextBtn.addEventListener('click', () => this.next());
+        if (this.shareBtnEl) this.shareBtnEl.addEventListener('click', () => this._share());
 
         this.repeatBtnEl = this.barEl.querySelector('.wb-repeat');
         if (this.repeatBtnEl) {
@@ -481,7 +491,14 @@ export class WaveformBar {
                     this._checkMarkerBoundary(currentTime);
                 }
             },
-            onLoad: null
+            onLoad: () => {
+                // Apply a shareable-timestamp seek (?<shareParam>=) once, on the
+                // first track load after a fresh page open.
+                if (this._shareSeek != null && this.player) {
+                    this.player.seekTo(this._shareSeek);
+                    this._shareSeek = null;
+                }
+            }
         };
 
         if (this.config.waveformColor) opts.waveformColor = this.config.waveformColor;
@@ -1108,6 +1125,68 @@ export class WaveformBar {
     // =====================================================================
     // Internal: Loading & Display
     // =====================================================================
+
+    /**
+     * Read a shareable-timestamp seek (seconds) from the URL's
+     * `?<shareParam>=`, or null when absent/invalid.
+     * @returns {number|null}
+     * @private
+     */
+    _readShareSeek() {
+        try {
+            const raw = new URLSearchParams(window.location.search).get(this.config.shareParam);
+            if (raw == null) return null;
+            const t = Number(raw);
+            return Number.isFinite(t) && t >= 0 ? t : null;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    /**
+     * Copy a shareable link to the current track at the current position
+     * (`?<shareParam>=<seconds>`), use the native share sheet when available,
+     * and emit `waveformbar:share`.
+     * @private
+     */
+    _share() {
+        const cur = this.player && this.player.audio ? this.player.audio.currentTime : 0;
+        const seconds = Math.max(0, Math.floor(cur || 0));
+        let link;
+        try {
+            const url = new URL(window.location.href);
+            url.searchParams.set(this.config.shareParam, String(seconds));
+            link = url.toString();
+        } catch (e) {
+            return;
+        }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(link).catch(() => {});
+        }
+        if (navigator.share) {
+            const track = this.getCurrentTrack();
+            navigator.share({title: (track && track.title) || undefined, url: link}).catch(() => {});
+        }
+        this._flashShareCopied();
+        this._emit('share', {url: link, time: seconds, track: this.getCurrentTrack()});
+    }
+
+    /**
+     * Briefly flag the share button as "copied" for visual feedback.
+     * @private
+     */
+    _flashShareCopied() {
+        if (!this.shareBtnEl) return;
+        this.shareBtnEl.classList.add('wb-copied');
+        this.shareBtnEl.setAttribute('title', 'Link copied!');
+        clearTimeout(this._shareFlashTimeout);
+        this._shareFlashTimeout = setTimeout(() => {
+            if (this.shareBtnEl) {
+                this.shareBtnEl.classList.remove('wb-copied');
+                this.shareBtnEl.setAttribute('title', 'Copy share link');
+            }
+        }, 1500);
+    }
 
     _loadCurrentTrack() {
         const track = this.getCurrentTrack();

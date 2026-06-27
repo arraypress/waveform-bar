@@ -6,6 +6,7 @@
     prev: '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>',
     next: '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>',
     queue: '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>',
+    share: '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>',
     music: '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" opacity="0.5"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55C7.79 13 6 14.79 6 17s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>',
     volHigh: '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>',
     volLow: '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M18.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM5 9v6h4l5 5V4L9 9H5z"/></svg>',
@@ -221,6 +222,9 @@
       }
       right += "</div>";
     }
+    if (config.share) {
+      right += `<button class="wb-btn wb-btn-sm wb-share" aria-label="Share" title="Copy share link">${ICONS.share}</button>`;
+    }
     if (config.showQueue) {
       right += `<button class="wb-btn wb-btn-sm wb-queue-btn" aria-label="Queue" title="Queue">${ICONS.queue}</button>`;
     }
@@ -335,6 +339,10 @@
     // custom content max-width (CSS value), e.g. '1200px'; overrides `wide`
     errorText: null,
     // custom "audio failed to load" message (null = player default)
+    share: false,
+    // show a "copy share link" button (emits ?<shareParam>=<seconds>)
+    shareParam: "wt",
+    // URL query param for the shared timestamp (seconds)
     waveformStyle: "mirror",
     waveformHeight: 32,
     barWidth: 2,
@@ -407,6 +415,7 @@
       this.config = { ...DEFAULTS, ...config };
       const v = Number(this.config.volume);
       this.volume = Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 1;
+      this._shareSeek = this._readShareSeek();
       if (typeof window.WaveformPlayer === "undefined") {
         console.error("[WaveformBar] WaveformPlayer is required.");
         return this;
@@ -466,6 +475,8 @@
         clearTimeout(this._restoreSeekTimeout);
         this._restoreSeekTimeout = null;
       }
+      clearTimeout(this._shareFlashTimeout);
+      this._shareFlashTimeout = null;
       this._loadSeq++;
       if (this.barEl) {
         this.barEl.remove();
@@ -528,6 +539,7 @@
       this.playBtnEl = this.barEl.querySelector(".wb-play");
       this.waveformContainer = this.barEl.querySelector(".wb-waveform-container");
       this.queueBtnEl = this.barEl.querySelector(".wb-queue-btn");
+      this.shareBtnEl = this.barEl.querySelector(".wb-share");
       this.muteBtnEl = this.barEl.querySelector(".wb-mute");
       this.volumeSliderEl = this.barEl.querySelector(".wb-volume-slider");
       this.favBtnEl = this.barEl.querySelector(".wb-fav");
@@ -539,6 +551,7 @@
       const nextBtn = this.barEl.querySelector(".wb-next");
       if (prevBtn) prevBtn.addEventListener("click", () => this.previous());
       if (nextBtn) nextBtn.addEventListener("click", () => this.next());
+      if (this.shareBtnEl) this.shareBtnEl.addEventListener("click", () => this._share());
       this.repeatBtnEl = this.barEl.querySelector(".wb-repeat");
       if (this.repeatBtnEl) {
         this.repeat = this.config.repeat || "off";
@@ -677,7 +690,12 @@
             this._checkMarkerBoundary(currentTime);
           }
         },
-        onLoad: null
+        onLoad: () => {
+          if (this._shareSeek != null && this.player) {
+            this.player.seekTo(this._shareSeek);
+            this._shareSeek = null;
+          }
+        }
       };
       if (this.config.waveformColor) opts.waveformColor = this.config.waveformColor;
       if (this.config.progressColor) opts.progressColor = this.config.progressColor;
@@ -1183,6 +1201,67 @@
     // =====================================================================
     // Internal: Loading & Display
     // =====================================================================
+    /**
+     * Read a shareable-timestamp seek (seconds) from the URL's
+     * `?<shareParam>=`, or null when absent/invalid.
+     * @returns {number|null}
+     * @private
+     */
+    _readShareSeek() {
+      try {
+        const raw = new URLSearchParams(window.location.search).get(this.config.shareParam);
+        if (raw == null) return null;
+        const t = Number(raw);
+        return Number.isFinite(t) && t >= 0 ? t : null;
+      } catch (e) {
+        return null;
+      }
+    }
+    /**
+     * Copy a shareable link to the current track at the current position
+     * (`?<shareParam>=<seconds>`), use the native share sheet when available,
+     * and emit `waveformbar:share`.
+     * @private
+     */
+    _share() {
+      const cur = this.player && this.player.audio ? this.player.audio.currentTime : 0;
+      const seconds = Math.max(0, Math.floor(cur || 0));
+      let link;
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.set(this.config.shareParam, String(seconds));
+        link = url.toString();
+      } catch (e) {
+        return;
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(link).catch(() => {
+        });
+      }
+      if (navigator.share) {
+        const track = this.getCurrentTrack();
+        navigator.share({ title: track && track.title || void 0, url: link }).catch(() => {
+        });
+      }
+      this._flashShareCopied();
+      this._emit("share", { url: link, time: seconds, track: this.getCurrentTrack() });
+    }
+    /**
+     * Briefly flag the share button as "copied" for visual feedback.
+     * @private
+     */
+    _flashShareCopied() {
+      if (!this.shareBtnEl) return;
+      this.shareBtnEl.classList.add("wb-copied");
+      this.shareBtnEl.setAttribute("title", "Link copied!");
+      clearTimeout(this._shareFlashTimeout);
+      this._shareFlashTimeout = setTimeout(() => {
+        if (this.shareBtnEl) {
+          this.shareBtnEl.classList.remove("wb-copied");
+          this.shareBtnEl.setAttribute("title", "Copy share link");
+        }
+      }, 1500);
+    }
     _loadCurrentTrack() {
       const track = this.getCurrentTrack();
       if (!track || !this.player) return;

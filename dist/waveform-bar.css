@@ -148,6 +148,11 @@
     pointer-events: none;
 }
 
+/* Brief "link copied" feedback on the share button. */
+.wb-share.wb-copied {
+    color: #4ade80;
+}
+
 .wb-btn-sm {
     width: 32px;
     height: 32px;

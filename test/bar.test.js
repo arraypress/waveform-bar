@@ -184,3 +184,44 @@ describe('volume coercion', () => {
 		expect(bar.volume).toBe(1);
 	});
 });
+
+describe('shareable timestamps', () => {
+	it('renders the share button only when share:true', () => {
+		const off = makeBar({ persist: false });
+		expect(off.barEl.querySelector('.wb-share')).toBe(null);
+		off.destroy();
+		const on = makeBar({ persist: false, share: true });
+		expect(on.barEl.querySelector('.wb-share')).toBeTruthy();
+	});
+
+	it('copies a link with the current timestamp and emits waveformbar:share', () => {
+		const writeText = vi.fn().mockResolvedValue(undefined);
+		Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+		const bar = makeBar({ persist: false, share: true });
+		MockPlayer.last.audio.currentTime = 42;
+		let ev = null;
+		document.addEventListener('waveformbar:share', (e) => { ev = e; }, { once: true });
+
+		bar.barEl.querySelector('.wb-share').click();
+
+		expect(writeText).toHaveBeenCalledTimes(1);
+		expect(writeText.mock.calls[0][0]).toMatch(/[?&]wt=42\b/);
+		expect(ev?.detail.time).toBe(42);
+	});
+
+	it('seeks the first-loaded track to ?wt= exactly once', () => {
+		history.replaceState({}, '', '/?wt=90');
+		const bar = makeBar({ persist: false });
+		const player = MockPlayer.last;
+		const seekSpy = vi.spyOn(player, 'seekTo');
+
+		player.options.onLoad();              // simulate first track finishing load
+		expect(seekSpy).toHaveBeenCalledWith(90);
+
+		seekSpy.mockClear();
+		player.options.onLoad();              // already applied — no second seek
+		expect(seekSpy).not.toHaveBeenCalled();
+
+		history.replaceState({}, '', '/');    // reset for other tests
+	});
+});

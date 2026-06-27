@@ -74,6 +74,10 @@ export function buildBarHTML(config) {
         right += '</div>';
     }
 
+    if (config.share) {
+        right += `<button class="wb-btn wb-btn-sm wb-share" aria-label="Share" title="Copy share link">${ICONS.share}</button>`;
+    }
+
     if (config.showQueue) {
         right += `<button class="wb-btn wb-btn-sm wb-queue-btn" aria-label="Queue" title="Queue">${ICONS.queue}</button>`;
     }
