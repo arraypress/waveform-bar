@@ -95,39 +95,3 @@ export function buildBarHTML(config) {
 
     return `<div class="wb-inner">${left}${centre}${right}${collapse}</div>`;
 }
-
-/**
- * Build the expandable now-playing panel's inner HTML (a full-screen overlay
- * sheet: large artwork, the relocated waveform, transport controls, and the
- * queue). Created once when `expandable` is on; the bar's player canvas is
- * physically moved into `.wb-panel-stage` while open so it's the *same* audio.
- * @param {Object} config
- * @returns {string}
- */
-export function buildPanelHTML(config) {
-    return `<div class="wb-panel-overlay"></div>
-    <div class="wb-panel-sheet" role="dialog" aria-modal="true" aria-label="Now playing">
-        <div class="wb-panel-top">
-            <button class="wb-btn wb-panel-close" aria-label="Close" title="Close">${ICONS.close}</button>
-        </div>
-        <div class="wb-panel-art">${ICONS.music}</div>
-        <div class="wb-panel-meta">
-            <div class="wb-panel-title">No track selected</div>
-            <div class="wb-panel-artist">&mdash;</div>
-        </div>
-        <div class="wb-panel-stage"></div>
-        <div class="wb-panel-time"><span class="wb-panel-current">0:00</span> / <span class="wb-panel-total">0:00</span></div>
-        <div class="wb-panel-controls">
-            <button class="wb-btn wb-panel-prev" aria-label="Previous" title="Previous">${ICONS.prev}</button>
-            <button class="wb-btn wb-panel-play" aria-label="Play/Pause" title="Play">
-                <span class="wb-panel-icon-play">${ICONS.play}</span>
-                <span class="wb-panel-icon-pause" style="display:none">${ICONS.pause}</span>
-            </button>
-            <button class="wb-btn wb-panel-next" aria-label="Next" title="Next">${ICONS.next}</button>
-        </div>
-        <div class="wb-panel-queue">
-            <div class="wb-panel-queue-head">Up Next</div>
-            <div class="wb-panel-queue-body"></div>
-        </div>
-    </div>`;
-}

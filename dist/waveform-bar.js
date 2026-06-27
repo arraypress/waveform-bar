@@ -234,33 +234,6 @@
     const collapse = config.collapsible ? `<button class="wb-btn wb-btn-sm wb-collapse" aria-label="Collapse" title="Collapse">${ICONS.collapse}</button>` : "";
     return `<div class="wb-inner">${left}${centre}${right}${collapse}</div>`;
   }
-  function buildPanelHTML(config) {
-    return `<div class="wb-panel-overlay"></div>
-    <div class="wb-panel-sheet" role="dialog" aria-modal="true" aria-label="Now playing">
-        <div class="wb-panel-top">
-            <button class="wb-btn wb-panel-close" aria-label="Close" title="Close">${ICONS.close}</button>
-        </div>
-        <div class="wb-panel-art">${ICONS.music}</div>
-        <div class="wb-panel-meta">
-            <div class="wb-panel-title">No track selected</div>
-            <div class="wb-panel-artist">&mdash;</div>
-        </div>
-        <div class="wb-panel-stage"></div>
-        <div class="wb-panel-time"><span class="wb-panel-current">0:00</span> / <span class="wb-panel-total">0:00</span></div>
-        <div class="wb-panel-controls">
-            <button class="wb-btn wb-panel-prev" aria-label="Previous" title="Previous">${ICONS.prev}</button>
-            <button class="wb-btn wb-panel-play" aria-label="Play/Pause" title="Play">
-                <span class="wb-panel-icon-play">${ICONS.play}</span>
-                <span class="wb-panel-icon-pause" style="display:none">${ICONS.pause}</span>
-            </button>
-            <button class="wb-btn wb-panel-next" aria-label="Next" title="Next">${ICONS.next}</button>
-        </div>
-        <div class="wb-panel-queue">
-            <div class="wb-panel-queue-head">Up Next</div>
-            <div class="wb-panel-queue-body"></div>
-        </div>
-    </div>`;
-  }
 
   // src/js/queue.js
   function createQueuePanel() {
@@ -370,11 +343,9 @@
     position: "bottom",
     // 'bottom' (default) or 'top' — which edge the bar docks to
     collapsible: false,
-    // show a collapse button that shrinks the bar to a floating pill
+    // show a collapse button that shrinks the bar to a floating transport pill
     waveform: true,
     // false = classic Spotify-style seek bar instead of the waveform
-    expandable: false,
-    // click the artwork to open a full now-playing panel (art + waveform + queue)
     errorText: null,
     // custom "audio failed to load" message (null = player default)
     share: false,
@@ -499,10 +470,6 @@
         document.removeEventListener("click", this._docClickQueue);
         this._docClickQueue = null;
       }
-      if (this._panelKeydown) {
-        document.removeEventListener("keydown", this._panelKeydown);
-        this._panelKeydown = null;
-      }
       if (this._docClickTriggers) {
         document.removeEventListener("click", this._docClickTriggers);
         this._docClickTriggers = null;
@@ -534,12 +501,6 @@
         this.queueEl.remove();
         this.queueEl = null;
       }
-      if (this.panelEl) {
-        this.panelEl.remove();
-        this.panelEl = null;
-      }
-      this.isPanelOpen = false;
-      document.body.classList.remove("wb-panel-lock");
       if (this._observer) {
         this._observer.disconnect();
         this._observer = null;
@@ -564,16 +525,6 @@
       this.cartBtnEl = null;
       this.timeCurrentEl = null;
       this.timeTotalEl = null;
-      this.centreEl = null;
-      this.artworkEl = null;
-      this.panelStageEl = null;
-      this.panelArtEl = null;
-      this.panelTitleEl = null;
-      this.panelArtistEl = null;
-      this.panelCurrentEl = null;
-      this.panelTotalEl = null;
-      this.panelPlayEl = null;
-      this.panelQueueBodyEl = null;
       document.querySelectorAll(".wb-current,.wb-playing").forEach((el) => el.classList.remove("wb-current", "wb-playing"));
       this.queue = [];
       this.currentIndex = -1;
@@ -612,23 +563,10 @@
       this.timeCurrentEl = this.barEl.querySelector(".wb-time-current");
       this.timeTotalEl = this.barEl.querySelector(".wb-time-total");
       this.collapseBtnEl = this.barEl.querySelector(".wb-collapse");
-      this.centreEl = this.barEl.querySelector(".wb-centre");
-      this.artworkEl = this.barEl.querySelector(".wb-artwork");
       this.playBtnEl.addEventListener("click", () => this.togglePlay());
       if (this.collapseBtnEl) {
         this.collapseBtnEl.addEventListener("click", () => this.toggleCollapse());
         if (this._readCollapsed()) this.collapse();
-      }
-      if (this.config.expandable) {
-        this.barEl.classList.add("wb-expandable");
-        this._createPanel();
-        if (this.artworkEl) {
-          this.artworkEl.setAttribute("title", "Expand");
-          this.artworkEl.addEventListener("click", (e) => {
-            e.stopPropagation();
-            this.expandPanel();
-          });
-        }
       }
       const prevBtn = this.barEl.querySelector(".wb-prev");
       const nextBtn = this.barEl.querySelector(".wb-next");
@@ -767,10 +705,6 @@
           this._lastPosition = currentTime;
           if (this.timeCurrentEl) this.timeCurrentEl.textContent = formatTime(currentTime);
           if (this.timeTotalEl) this.timeTotalEl.textContent = formatTime(duration);
-          if (this.isPanelOpen) {
-            if (this.panelCurrentEl) this.panelCurrentEl.textContent = formatTime(currentTime);
-            if (this.panelTotalEl) this.panelTotalEl.textContent = formatTime(duration);
-          }
           this._pumpExternalProgress(currentTime, duration);
           if (!this._lastSaveTime || currentTime - this._lastSaveTime > 2) {
             this._lastSaveTime = currentTime;
@@ -1529,134 +1463,6 @@
         return false;
       }
     }
-    /**
-     * Build the now-playing panel once: append it to the body, cache refs, and
-     * bind close / overlay / transport / Escape handlers. The bar's waveform is
-     * relocated into `.wb-panel-stage` while open (see expandPanel).
-     * @private
-     */
-    _createPanel() {
-      this.panelEl = document.createElement("div");
-      this.panelEl.className = "wb-panel";
-      if (this._resolvedTheme === "light") this.panelEl.classList.add("wb-light");
-      this.panelEl.innerHTML = buildPanelHTML(this.config);
-      document.body.appendChild(this.panelEl);
-      this.panelStageEl = this.panelEl.querySelector(".wb-panel-stage");
-      this.panelArtEl = this.panelEl.querySelector(".wb-panel-art");
-      this.panelTitleEl = this.panelEl.querySelector(".wb-panel-title");
-      this.panelArtistEl = this.panelEl.querySelector(".wb-panel-artist");
-      this.panelCurrentEl = this.panelEl.querySelector(".wb-panel-current");
-      this.panelTotalEl = this.panelEl.querySelector(".wb-panel-total");
-      this.panelPlayEl = this.panelEl.querySelector(".wb-panel-play");
-      this.panelQueueBodyEl = this.panelEl.querySelector(".wb-panel-queue-body");
-      this.panelEl.querySelector(".wb-panel-close").addEventListener("click", () => this.collapsePanel());
-      this.panelEl.querySelector(".wb-panel-overlay").addEventListener("click", () => this.collapsePanel());
-      if (this.panelPlayEl) this.panelPlayEl.addEventListener("click", () => this.togglePlay());
-      const prev = this.panelEl.querySelector(".wb-panel-prev");
-      const next = this.panelEl.querySelector(".wb-panel-next");
-      if (prev) prev.addEventListener("click", () => this.previous());
-      if (next) next.addEventListener("click", () => this.next());
-      this._panelKeydown = (e) => {
-        if (e.key === "Escape" && this.isPanelOpen) this.collapsePanel();
-      };
-      document.addEventListener("keydown", this._panelKeydown);
-    }
-    /**
-     * Open the now-playing panel: relocate the waveform into the panel stage
-     * (same player — keeps playing, its ResizeObserver redraws it bigger), sync
-     * the panel contents, and reveal it.
-     * @returns {WaveformBar}
-     */
-    expandPanel() {
-      if (!this.panelEl || this.isPanelOpen) return this;
-      this.isPanelOpen = true;
-      this.panelEl.classList.add("wb-panel-active");
-      if (this.waveformContainer && this.panelStageEl) {
-        this.panelStageEl.appendChild(this.waveformContainer);
-        this._resizePlayer(96);
-      }
-      this._syncPanel();
-      document.body.classList.add("wb-panel-lock");
-      this._emit("panelopen", { track: this.getCurrentTrack() });
-      return this;
-    }
-    /**
-     * Close the panel and move the waveform back into the bar.
-     * @returns {WaveformBar}
-     */
-    collapsePanel() {
-      if (!this.panelEl || !this.isPanelOpen) return this;
-      this.isPanelOpen = false;
-      if (this.waveformContainer && this.centreEl) {
-        this.centreEl.insertBefore(this.waveformContainer, this.centreEl.firstChild);
-        this._resizePlayer(this.config.waveformHeight);
-      }
-      this.panelEl.classList.remove("wb-panel-active");
-      document.body.classList.remove("wb-panel-lock");
-      this._emit("panelclose", { track: this.getCurrentTrack() });
-      return this;
-    }
-    /**
-     * Toggle the now-playing panel.
-     * @returns {WaveformBar}
-     */
-    togglePanel() {
-      return this.isPanelOpen ? this.collapsePanel() : this.expandPanel();
-    }
-    /**
-     * Resize the embedded player's canvas to a new height and force a redraw at
-     * the current container width. Called when the waveform is relocated between
-     * the bar and the now-playing panel — a DOM move doesn't reliably trip the
-     * player's ResizeObserver, so we drive resizeCanvas() explicitly.
-     * @param {number} height
-     * @private
-     */
-    _resizePlayer(height) {
-      if (!this.player) return;
-      if (typeof height === "number" && this.player.options) {
-        this.player.options.height = height;
-      }
-      if (typeof this.player.resizeCanvas === "function") this.player.resizeCanvas();
-    }
-    /**
-     * Mirror the current track + play state + queue into the panel.
-     * @private
-     */
-    _syncPanel() {
-      if (!this.panelEl) return;
-      const track = this.getCurrentTrack();
-      if (this.panelTitleEl) this.panelTitleEl.textContent = track && track.title || "No track selected";
-      if (this.panelArtistEl) this.panelArtistEl.textContent = track && track.artist || "";
-      if (this.panelArtEl) {
-        const art = track && track.artwork || this.config.defaultArtwork;
-        this.panelArtEl.innerHTML = art ? `<img src="${escapeHtml(art)}" alt="${escapeHtml(track && track.title || "")}" />` : ICONS.music;
-      }
-      this._updatePanelPlayButton();
-      this._renderPanelQueue();
-    }
-    /**
-     * Swap the panel play/pause icons to match playback state.
-     * @private
-     */
-    _updatePanelPlayButton() {
-      if (!this.panelPlayEl) return;
-      const play = this.panelPlayEl.querySelector(".wb-panel-icon-play");
-      const pause = this.panelPlayEl.querySelector(".wb-panel-icon-pause");
-      if (play) play.style.display = this.isPlaying ? "none" : "block";
-      if (pause) pause.style.display = this.isPlaying ? "block" : "none";
-      this.panelPlayEl.title = this.isPlaying ? "Pause" : "Play";
-    }
-    /**
-     * Render the queue into the panel list (reuses the shared renderQueue).
-     * @private
-     */
-    _renderPanelQueue() {
-      if (!this.panelQueueBodyEl) return;
-      renderQueue(this.panelQueueBodyEl, null, this.queue, this.currentIndex, {
-        onSkipTo: (i) => this.skipTo(i),
-        onRemove: (i) => this.removeFromQueue(i)
-      });
-    }
     _loadCurrentTrack() {
       const track = this.getCurrentTrack();
       if (!track || !this.player) return;
@@ -1706,7 +1512,6 @@
       if (trackEl) trackEl.style.cursor = track.link ? "pointer" : "default";
       if (this.timeCurrentEl) this.timeCurrentEl.textContent = "0:00";
       if (this.timeTotalEl) this.timeTotalEl.textContent = "0:00";
-      if (this.isPanelOpen) this._syncPanel();
     }
     /**
      * Set text on an element with auto-scroll if it overflows.
@@ -1750,7 +1555,6 @@
       if (play) play.style.display = this.isPlaying ? "none" : "block";
       if (pause) pause.style.display = this.isPlaying ? "block" : "none";
       this.playBtnEl.title = this.isPlaying ? "Pause" : "Play";
-      this._updatePanelPlayButton();
     }
     _updateNavButtons() {
       const prevBtn = this.barEl?.querySelector(".wb-prev");
@@ -1906,7 +1710,6 @@
         onSkipTo: (i) => this.skipTo(i),
         onRemove: (i) => this.removeFromQueue(i)
       });
-      this._renderPanelQueue();
     }
     // =====================================================================
     // Page State Sync
