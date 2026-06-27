@@ -410,6 +410,14 @@
         this.player.destroy();
         this.player = null;
       }
+      if (this._docClickVolume) {
+        document.removeEventListener("click", this._docClickVolume);
+        this._docClickVolume = null;
+      }
+      if (this._docClickQueue) {
+        document.removeEventListener("click", this._docClickQueue);
+        this._docClickQueue = null;
+      }
       if (this.barEl) {
         this.barEl.remove();
         this.barEl = null;
@@ -418,6 +426,8 @@
         this.queueEl.remove();
         this.queueEl = null;
       }
+      this.volumePopupEl = null;
+      this.queueBtnEl = null;
       if (this._observer) {
         this._observer.disconnect();
         this._observer = null;
@@ -496,11 +506,12 @@
           this.setVolume(parseInt(e.target.value) / 100);
         });
       }
-      document.addEventListener("click", (e) => {
-        if (this.volumePopupEl?.classList.contains("wb-volume-open") && !this.barEl.querySelector(".wb-volume")?.contains(e.target)) {
+      this._docClickVolume = (e) => {
+        if (this.volumePopupEl?.classList.contains("wb-volume-open") && !this.barEl?.querySelector(".wb-volume")?.contains(e.target)) {
           this.closeVolumePopup();
         }
-      });
+      };
+      document.addEventListener("click", this._docClickVolume);
       if (this.favBtnEl) this.favBtnEl.addEventListener("click", () => this.toggleFavorite());
       if (this.cartBtnEl) this.cartBtnEl.addEventListener("click", () => this.addToCart());
       if (this.config.showTrackLink) {
@@ -518,11 +529,12 @@
       this.queueBodyEl = this.queueEl.querySelector(".wb-queue-body");
       this.queueCountEl = this.queueEl.querySelector(".wb-queue-count");
       this.queueEl.querySelector(".wb-queue-clear").addEventListener("click", () => this.clearQueue());
-      document.addEventListener("click", (e) => {
-        if (this.queueOpen && !this.queueEl.contains(e.target) && !this.queueBtnEl.contains(e.target)) {
+      this._docClickQueue = (e) => {
+        if (this.queueOpen && !this.queueEl?.contains(e.target) && !this.queueBtnEl?.contains(e.target)) {
           this.closeQueuePanel();
         }
-      });
+      };
+      document.addEventListener("click", this._docClickQueue);
     }
     _initPlayer() {
       const opts = {
@@ -881,6 +893,7 @@
         this.isMuted = true;
         if (this.player) this.player.setVolume(0);
         this._updateVolumeUI();
+        saveVolume(this.config.storageKey, this.volume, this.isMuted, this._volumeBeforeMute);
       }
       return this;
     }
@@ -1249,7 +1262,7 @@
       }
       if (marker.artwork) {
         const artworkEl = this.barEl.querySelector(".wb-artwork");
-        if (artworkEl) artworkEl.innerHTML = `<img src="${marker.artwork}" alt="${marker.title || ""}" />`;
+        if (artworkEl) artworkEl.innerHTML = `<img src="${escapeHtml(marker.artwork)}" alt="${escapeHtml(marker.title || "")}" />`;
       }
       if (this.metaEl && (marker.bpm || marker.key)) {
         const metaTrack = {
@@ -1430,24 +1443,21 @@
       this._updateTrackDisplay(track);
       this._updateFavoriteUI();
       this._updateNavButtons();
-      if (track.waveform) {
-        this.player.options.waveform = track.waveform;
-      }
-      this.player.options.title = track.title || "";
-      this.player.options.subtitle = track.artist || "";
+      const loadOpts = { autoplay: false };
+      if (track.waveform) loadOpts.waveform = track.waveform;
       if (track.markers && track.markers.length) {
         const defaultColor = this.config.markerColor;
-        this.player.options.markers = track.markers.map((m) => ({
+        loadOpts.markers = track.markers.map((m) => ({
           ...m,
           color: m.color || defaultColor
         }));
         this._activeMarkers = track.markers;
       } else {
-        this.player.options.markers = [];
+        loadOpts.markers = [];
         this._activeMarkers = null;
       }
       this._currentMarkerIndex = -1;
-      this.player.load(track.url).then(() => {
+      this.player.loadTrack(track.url, track.title, track.artist, loadOpts).then(() => {
         if (this.player) this.player.setVolume(this.isMuted ? 0 : this.volume);
         if (state.isPlaying && this.config.autoResume) {
           try {
