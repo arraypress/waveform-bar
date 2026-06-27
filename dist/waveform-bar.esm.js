@@ -30,6 +30,15 @@ function escapeHtml(str) {
   d.textContent = str;
   return d.innerHTML;
 }
+function isSafeHref(url) {
+  if (typeof url !== "string" || url === "") return false;
+  try {
+    const u = new URL(url, location.href);
+    return u.protocol === "http:" || u.protocol === "https:";
+  } catch (e) {
+    return false;
+  }
+}
 function formatTime(seconds) {
   if (!seconds || isNaN(seconds)) return "0:00";
   const m = Math.floor(seconds / 60);
@@ -41,12 +50,21 @@ function parseTrackFromElement(el) {
   if (!url) return null;
   let meta = {};
   try {
-    meta = JSON.parse(el.dataset.wbMeta || el.dataset.meta || "{}");
+    const parsed = JSON.parse(el.dataset.wbMeta || el.dataset.meta || "{}");
+    meta = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
   } catch (e) {
   }
-  let markers = null;
+  let markers = [];
   try {
-    markers = JSON.parse(el.dataset.wbMarkers || el.dataset.markers || "null");
+    const parsed = JSON.parse(el.dataset.wbMarkers || el.dataset.markers || "null");
+    markers = Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+  }
+  markers = markers.map((m) => m && typeof m === "object" ? { ...m, time: Number(m.time) } : null).filter((m) => m && Number.isFinite(m.time));
+  let waveform = null;
+  try {
+    const parsed = JSON.parse(el.dataset.wbWaveform || el.dataset.waveform || "null");
+    waveform = Array.isArray(parsed) ? parsed : null;
   } catch (e) {
   }
   return {
@@ -60,7 +78,7 @@ function parseTrackFromElement(el) {
     duration: el.dataset.wbDuration || el.dataset.duration || "",
     bpm: el.dataset.wbBpm || el.dataset.bpm || "",
     key: el.dataset.wbKey || el.dataset.key || "",
-    waveform: el.dataset.wbWaveform || el.dataset.waveform || "",
+    waveform,
     markers,
     favorited: el.dataset.wbFavorited === "true",
     inCart: el.dataset.wbInCart === "true",
@@ -347,6 +365,9 @@ var WaveformBar = class {
     this._activeMarkers = null;
     this._currentMarkerIndex = -1;
     this.repeat = "off";
+    this._loadSeq = 0;
+    this._restoreSeekTimeout = null;
+    this._externalPlayers = /* @__PURE__ */ new Map();
     this.barEl = null;
     this.queueEl = null;
     this.waveformContainer = null;
@@ -377,7 +398,8 @@ var WaveformBar = class {
   init(config = {}) {
     if (this.isInitialized) this.destroy();
     this.config = { ...DEFAULTS, ...config };
-    this.volume = this.config.volume;
+    const v = Number(this.config.volume);
+    this.volume = Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 1;
     if (typeof window.WaveformPlayer === "undefined") {
       console.error("[WaveformBar] WaveformPlayer is required.");
       return this;
@@ -417,6 +439,27 @@ var WaveformBar = class {
       document.removeEventListener("click", this._docClickQueue);
       this._docClickQueue = null;
     }
+    if (this._docClickTriggers) {
+      document.removeEventListener("click", this._docClickTriggers);
+      this._docClickTriggers = null;
+    }
+    if (this._externalListenersBound) {
+      document.removeEventListener("waveformplayer:request-play", this._onExtRequestPlay);
+      document.removeEventListener("waveformplayer:request-pause", this._onExtRequestPause);
+      document.removeEventListener("waveformplayer:request-seek", this._onExtRequestSeek);
+      document.removeEventListener("waveformplayer:destroy", this._onExtDestroy);
+      this._onExtRequestPlay = null;
+      this._onExtRequestPause = null;
+      this._onExtRequestSeek = null;
+      this._onExtDestroy = null;
+      this._externalListenersBound = false;
+    }
+    this._externalPlayers = /* @__PURE__ */ new Map();
+    if (this._restoreSeekTimeout) {
+      clearTimeout(this._restoreSeekTimeout);
+      this._restoreSeekTimeout = null;
+    }
+    this._loadSeq++;
     if (this.barEl) {
       this.barEl.remove();
       this.barEl = null;
@@ -425,8 +468,6 @@ var WaveformBar = class {
       this.queueEl.remove();
       this.queueEl = null;
     }
-    this.volumePopupEl = null;
-    this.queueBtnEl = null;
     if (this._observer) {
       this._observer.disconnect();
       this._observer = null;
@@ -435,7 +476,22 @@ var WaveformBar = class {
       window.removeEventListener("beforeunload", this._beforeUnloadHandler);
       this._beforeUnloadHandler = null;
     }
-    document.querySelectorAll("[data-wb-play],[data-wb-queue]").forEach((el) => delete el._wbBound);
+    this.volumePopupEl = null;
+    this.queueBtnEl = null;
+    this.titleEl = null;
+    this.artistEl = null;
+    this.metaEl = null;
+    this.playBtnEl = null;
+    this.repeatBtnEl = null;
+    this.waveformContainer = null;
+    this.queueBodyEl = null;
+    this.queueCountEl = null;
+    this.muteBtnEl = null;
+    this.volumeSliderEl = null;
+    this.favBtnEl = null;
+    this.cartBtnEl = null;
+    this.timeCurrentEl = null;
+    this.timeTotalEl = null;
     document.querySelectorAll(".wb-current,.wb-playing").forEach((el) => el.classList.remove("wb-current", "wb-playing"));
     this.queue = [];
     this.currentIndex = -1;
@@ -516,7 +572,7 @@ var WaveformBar = class {
     if (this.config.showTrackLink) {
       this.barEl.querySelector(".wb-track").addEventListener("click", () => {
         const t = this.getCurrentTrack();
-        if (t && t.link) window.location.href = t.link;
+        if (t && t.link && isSafeHref(t.link)) window.location.href = t.link;
       });
     }
   }
@@ -585,6 +641,18 @@ var WaveformBar = class {
           this._loadCurrentTrack();
         }
       },
+      onError: () => {
+        this.isPlaying = false;
+        this._updatePlayButton();
+        this._syncPageState();
+        this._pumpExternalPlayState(false);
+        const track = this.getCurrentTrack();
+        this._emit("error", { track });
+        if (this.config.continuous && this.currentIndex < this.queue.length - 1) {
+          this.currentIndex++;
+          this._loadCurrentTrack();
+        }
+      },
       onTimeUpdate: (currentTime, duration) => {
         this._lastPosition = currentTime;
         if (this.timeCurrentEl) this.timeCurrentEl.textContent = formatTime(currentTime);
@@ -609,25 +677,24 @@ var WaveformBar = class {
   // Triggers (private)
   // =====================================================================
   _bindTriggers() {
-    document.querySelectorAll("[data-wb-play]").forEach((el) => {
-      if (el._wbBound) return;
-      el._wbBound = true;
-      el.addEventListener("click", (e) => {
-        e.preventDefault();
-        const track = parseTrackFromElement(el);
-        if (track) this.play(track);
-      });
-    });
-    document.querySelectorAll("[data-wb-queue]").forEach((el) => {
-      if (el._wbBound) return;
-      el._wbBound = true;
-      el.addEventListener("click", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        const track = parseTrackFromElement(el);
-        if (track) this.addToQueue(track);
-      });
-    });
+    if (!this._docClickTriggers) {
+      this._docClickTriggers = (e) => {
+        const queueEl = e.target?.closest?.("[data-wb-queue]");
+        if (queueEl) {
+          e.preventDefault();
+          const track = parseTrackFromElement(queueEl);
+          if (track) this.addToQueue(track);
+          return;
+        }
+        const playEl = e.target?.closest?.("[data-wb-play]");
+        if (playEl) {
+          e.preventDefault();
+          const track = parseTrackFromElement(playEl);
+          if (track) this.play(track);
+        }
+      };
+      document.addEventListener("click", this._docClickTriggers);
+    }
     this._attachExternalPlayers();
   }
   /**
@@ -645,13 +712,13 @@ var WaveformBar = class {
   _attachExternalPlayers() {
     if (!this._externalListenersBound) {
       this._externalListenersBound = true;
-      document.addEventListener("waveformplayer:request-play", (e) => {
+      this._onExtRequestPlay = (e) => {
         const t = e.detail;
         if (!t || !t.url) return;
         e.preventDefault();
         this.play(t);
-      });
-      document.addEventListener("waveformplayer:request-pause", (e) => {
+      };
+      this._onExtRequestPause = (e) => {
         const t = e.detail;
         if (!t || !t.url) return;
         const current = this.getCurrentTrack();
@@ -659,8 +726,8 @@ var WaveformBar = class {
           e.preventDefault();
           if (this.isPlaying) this.togglePlay();
         }
-      });
-      document.addEventListener("waveformplayer:request-seek", (e) => {
+      };
+      this._onExtRequestSeek = (e) => {
         const t = e.detail;
         if (!t || !t.url || typeof t.percent !== "number") return;
         const current = this.getCurrentTrack();
@@ -668,7 +735,16 @@ var WaveformBar = class {
           e.preventDefault();
           this.player.seekToPercent(t.percent);
         }
-      });
+      };
+      this._onExtDestroy = (e) => {
+        const inst = e.detail && e.detail.player;
+        if (!inst || !this._externalPlayers) return;
+        this._externalPlayers.forEach((set) => set.delete(inst));
+      };
+      document.addEventListener("waveformplayer:request-play", this._onExtRequestPlay);
+      document.addEventListener("waveformplayer:request-pause", this._onExtRequestPause);
+      document.addEventListener("waveformplayer:request-seek", this._onExtRequestSeek);
+      document.addEventListener("waveformplayer:destroy", this._onExtDestroy);
     }
     const previous = this._externalPlayers || /* @__PURE__ */ new Map();
     this._externalPlayers = /* @__PURE__ */ new Map();
@@ -745,7 +821,7 @@ var WaveformBar = class {
   _observeDOM() {
     if (typeof MutationObserver === "undefined") return;
     this._observer = new MutationObserver(() => {
-      this._bindTriggers();
+      this._attachExternalPlayers();
       this._syncPageState();
     });
     this._observer.observe(document.body, { childList: true, subtree: true });
@@ -932,7 +1008,9 @@ var WaveformBar = class {
     this._cartItems.add(id);
     if (this.cartBtnEl) {
       this.cartBtnEl.classList.add("wb-action-done");
-      setTimeout(() => this.cartBtnEl.classList.remove("wb-action-done"), 1500);
+      setTimeout(() => {
+        if (this.cartBtnEl) this.cartBtnEl.classList.remove("wb-action-done");
+      }, 1500);
     }
     this._syncCartAttributes(track.url, true);
     this._emit("cart", { track });
@@ -1097,6 +1175,11 @@ var WaveformBar = class {
   _loadCurrentTrack() {
     const track = this.getCurrentTrack();
     if (!track || !this.player) return;
+    this._loadSeq++;
+    if (this._restoreSeekTimeout) {
+      clearTimeout(this._restoreSeekTimeout);
+      this._restoreSeekTimeout = null;
+    }
     this._pumpExternalPlayState(false);
     this.show();
     this._updateTrackDisplay(track);
@@ -1456,7 +1539,13 @@ var WaveformBar = class {
       this._activeMarkers = null;
     }
     this._currentMarkerIndex = -1;
+    const seq = ++this._loadSeq;
+    if (this._restoreSeekTimeout) {
+      clearTimeout(this._restoreSeekTimeout);
+      this._restoreSeekTimeout = null;
+    }
     this.player.loadTrack(track.url, track.title, track.artist, loadOpts).then(() => {
+      if (this._loadSeq !== seq) return;
       if (this.player) this.player.setVolume(this.isMuted ? 0 : this.volume);
       if (state.isPlaying && this.config.autoResume) {
         try {
@@ -1475,7 +1564,9 @@ var WaveformBar = class {
         }
       }
       if (state.position > 0) {
-        setTimeout(() => {
+        this._restoreSeekTimeout = setTimeout(() => {
+          this._restoreSeekTimeout = null;
+          if (this._loadSeq !== seq) return;
           if (this.player) {
             this.player.seekTo(state.position);
             this._lastPosition = state.position;
@@ -1490,7 +1581,8 @@ var WaveformBar = class {
   _restoreVolume() {
     const data = restoreVolume(this.config.storageKey);
     if (!data) return;
-    this.volume = data.volume;
+    const v = Number(data.volume);
+    this.volume = Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 1;
     this.isMuted = data.muted;
     this._volumeBeforeMute = data.volumeBeforeMute;
     if (this.player) this.player.setVolume(this.isMuted ? 0 : this.volume);

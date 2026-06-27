@@ -21,6 +21,8 @@
     "dev": "esbuild src/js/index.js --bundle --format=iife --outfile=dist/waveform-bar.js --watch",
     "serve": "npx http-server -p 8000",
     "size": "npm run build && echo 'JS:' && gzip -c dist/waveform-bar.min.js | wc -c && echo 'CSS:' && gzip -c dist/waveform-bar.min.css | wc -c",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "prepublishOnly": "npm run build"
   },
   "keywords": [
@@ -55,6 +57,8 @@
     "@arraypress/waveform-player": "^1.7.2"
   },
   "devDependencies": {
-    "esbuild": "^0.25.0"
+    "esbuild": "^0.25.0",
+    "jsdom": "^29.1.1",
+    "vitest": "^4.1.9"
   }
 }

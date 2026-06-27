@@ -4,7 +4,7 @@
  */
 
 import {ICONS} from './icons.js';
-import {extractTitle, escapeHtml, formatTime, parseTrackFromElement} from './utils.js';
+import {extractTitle, escapeHtml, formatTime, parseTrackFromElement, isSafeHref} from './utils.js';
 import {
     saveQueueState,
     restoreQueueState,
@@ -75,6 +75,15 @@ export class WaveformBar {
         this._currentMarkerIndex = -1;
         this.repeat = 'off'; // 'off', 'all', 'one'
 
+        // Load-race guard: bumped before every track load so async
+        // continuations (loadTrack().then / restore-seek timeout) can detect
+        // that a newer load superseded them and bail out.
+        this._loadSeq = 0;
+        this._restoreSeekTimeout = null;
+
+        // Map<url, Set<WaveformPlayer>> of external-mode visual surfaces.
+        this._externalPlayers = new Map();
+
         // DOM refs
         this.barEl = null;
         this.queueEl = null;
@@ -109,7 +118,11 @@ export class WaveformBar {
         if (this.isInitialized) this.destroy();
 
         this.config = {...DEFAULTS, ...config};
-        this.volume = this.config.volume;
+
+        // Normalize volume from config — guard NaN / out-of-range so a bad
+        // value can't mute the player or throw downstream.
+        const v = Number(this.config.volume);
+        this.volume = Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 1;
 
         if (typeof window.WaveformPlayer === 'undefined') {
             console.error('[WaveformBar] WaveformPlayer is required.');
@@ -161,6 +174,35 @@ export class WaveformBar {
             document.removeEventListener('click', this._docClickQueue);
             this._docClickQueue = null;
         }
+        // Single delegated trigger listener (replaces per-element binding).
+        if (this._docClickTriggers) {
+            document.removeEventListener('click', this._docClickTriggers);
+            this._docClickTriggers = null;
+        }
+        // External-mode WaveformPlayer document listeners — previously
+        // anonymous and never removed. Stored on `this` so they can be torn
+        // down and the bind flag reset for a clean re-init.
+        if (this._externalListenersBound) {
+            document.removeEventListener('waveformplayer:request-play', this._onExtRequestPlay);
+            document.removeEventListener('waveformplayer:request-pause', this._onExtRequestPause);
+            document.removeEventListener('waveformplayer:request-seek', this._onExtRequestSeek);
+            document.removeEventListener('waveformplayer:destroy', this._onExtDestroy);
+            this._onExtRequestPlay = null;
+            this._onExtRequestPause = null;
+            this._onExtRequestSeek = null;
+            this._onExtDestroy = null;
+            this._externalListenersBound = false;
+        }
+        this._externalPlayers = new Map();
+
+        // Cancel pending async work that could touch torn-down refs.
+        if (this._restoreSeekTimeout) {
+            clearTimeout(this._restoreSeekTimeout);
+            this._restoreSeekTimeout = null;
+        }
+        // Invalidate any in-flight load continuation.
+        this._loadSeq++;
+
         if (this.barEl) {
             this.barEl.remove();
             this.barEl = null;
@@ -169,8 +211,6 @@ export class WaveformBar {
             this.queueEl.remove();
             this.queueEl = null;
         }
-        this.volumePopupEl = null;
-        this.queueBtnEl = null;
         if (this._observer) {
             this._observer.disconnect();
             this._observer = null;
@@ -180,7 +220,24 @@ export class WaveformBar {
             this._beforeUnloadHandler = null;
         }
 
-        document.querySelectorAll('[data-wb-play],[data-wb-queue]').forEach(el => delete el._wbBound);
+        // Null cached DOM refs so a stale ref can't be poked after teardown.
+        this.volumePopupEl = null;
+        this.queueBtnEl = null;
+        this.titleEl = null;
+        this.artistEl = null;
+        this.metaEl = null;
+        this.playBtnEl = null;
+        this.repeatBtnEl = null;
+        this.waveformContainer = null;
+        this.queueBodyEl = null;
+        this.queueCountEl = null;
+        this.muteBtnEl = null;
+        this.volumeSliderEl = null;
+        this.favBtnEl = null;
+        this.cartBtnEl = null;
+        this.timeCurrentEl = null;
+        this.timeTotalEl = null;
+
         document.querySelectorAll('.wb-current,.wb-playing').forEach(el => el.classList.remove('wb-current', 'wb-playing'));
 
         this.queue = [];
@@ -287,7 +344,9 @@ export class WaveformBar {
         if (this.config.showTrackLink) {
             this.barEl.querySelector('.wb-track').addEventListener('click', () => {
                 const t = this.getCurrentTrack();
-                if (t && t.link) window.location.href = t.link;
+                // Guard the scheme — a `data-wb-link="javascript:…"` value
+                // would otherwise execute on navigation (open-redirect / XSS).
+                if (t && t.link && isSafeHref(t.link)) window.location.href = t.link;
             });
         }
     }
@@ -372,6 +431,26 @@ export class WaveformBar {
                     this._loadCurrentTrack();
                 }
             },
+            onError: () => {
+                // A track failed to load/decode (bad URL, 404, codec). Without
+                // this the queue dead-stops on the broken entry. Reset play
+                // state, notify, and — when continuous — skip to the next
+                // entry so one dead track doesn't halt the whole queue.
+                this.isPlaying = false;
+                this._updatePlayButton();
+                this._syncPageState();
+                this._pumpExternalPlayState(false);
+
+                const track = this.getCurrentTrack();
+                this._emit('error', {track});
+
+                // Auto-advance like onEnd (but never wrap via repeat-all —
+                // that risks an infinite loop if the first track is also dead).
+                if (this.config.continuous && this.currentIndex < this.queue.length - 1) {
+                    this.currentIndex++;
+                    this._loadCurrentTrack();
+                }
+            },
             onTimeUpdate: (currentTime, duration) => {
                 this._lastPosition = currentTime;
                 if (this.timeCurrentEl) this.timeCurrentEl.textContent = formatTime(currentTime);
@@ -408,26 +487,34 @@ export class WaveformBar {
     // =====================================================================
 
     _bindTriggers() {
-        document.querySelectorAll('[data-wb-play]').forEach(el => {
-            if (el._wbBound) return;
-            el._wbBound = true;
-            el.addEventListener('click', (e) => {
-                e.preventDefault();
-                const track = parseTrackFromElement(el);
-                if (track) this.play(track);
-            });
-        });
+        // ONE delegated document listener instead of per-element binding.
+        // Per-element listeners leaked on every re-init (init() → destroy()
+        // only cleared a flag, never removed the handlers), leaving each row
+        // with stacked handlers that toggled each other so clicks did nothing.
+        // Delegation also covers late-mounted triggers for free, so the
+        // MutationObserver no longer needs to re-bind anything.
+        if (!this._docClickTriggers) {
+            this._docClickTriggers = (e) => {
+                // Queue first — a queue trigger nested in (or alongside) a
+                // play trigger must enqueue, not play. This mirrors the old
+                // per-element handler's stopPropagation() semantics.
+                const queueEl = e.target?.closest?.('[data-wb-queue]');
+                if (queueEl) {
+                    e.preventDefault();
+                    const track = parseTrackFromElement(queueEl);
+                    if (track) this.addToQueue(track);
+                    return;
+                }
 
-        document.querySelectorAll('[data-wb-queue]').forEach(el => {
-            if (el._wbBound) return;
-            el._wbBound = true;
-            el.addEventListener('click', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                const track = parseTrackFromElement(el);
-                if (track) this.addToQueue(track);
-            });
-        });
+                const playEl = e.target?.closest?.('[data-wb-play]');
+                if (playEl) {
+                    e.preventDefault();
+                    const track = parseTrackFromElement(playEl);
+                    if (track) this.play(track);
+                }
+            };
+            document.addEventListener('click', this._docClickTriggers);
+        }
 
         // External-mode WaveformPlayer instances on the page act as
         // visualization surfaces controlled by this bar — see the
@@ -451,18 +538,20 @@ export class WaveformBar {
      * @private
      */
     _attachExternalPlayers() {
-        // Document-level listeners only bind once.
+        // Document-level listeners only bind once. Stored on `this` so
+        // destroy() can remove them (they were previously anonymous and
+        // leaked across re-inits).
         if (!this._externalListenersBound) {
             this._externalListenersBound = true;
 
-            document.addEventListener('waveformplayer:request-play', (e) => {
+            this._onExtRequestPlay = (e) => {
                 const t = e.detail;
                 if (!t || !t.url) return;
                 e.preventDefault();
                 this.play(t);
-            });
+            };
 
-            document.addEventListener('waveformplayer:request-pause', (e) => {
+            this._onExtRequestPause = (e) => {
                 const t = e.detail;
                 if (!t || !t.url) return;
                 // Only honour pause when this is the currently-playing
@@ -472,9 +561,9 @@ export class WaveformBar {
                     e.preventDefault();
                     if (this.isPlaying) this.togglePlay();
                 }
-            });
+            };
 
-            document.addEventListener('waveformplayer:request-seek', (e) => {
+            this._onExtRequestSeek = (e) => {
                 const t = e.detail;
                 if (!t || !t.url || typeof t.percent !== 'number') return;
                 const current = this.getCurrentTrack();
@@ -482,7 +571,20 @@ export class WaveformBar {
                     e.preventDefault();
                     this.player.seekToPercent(t.percent);
                 }
-            });
+            };
+
+            // Prune a destroyed external player from the URL → players map
+            // so we don't keep pumping state into a torn-down instance.
+            this._onExtDestroy = (e) => {
+                const inst = e.detail && e.detail.player;
+                if (!inst || !this._externalPlayers) return;
+                this._externalPlayers.forEach((set) => set.delete(inst));
+            };
+
+            document.addEventListener('waveformplayer:request-play', this._onExtRequestPlay);
+            document.addEventListener('waveformplayer:request-pause', this._onExtRequestPause);
+            document.addEventListener('waveformplayer:request-seek', this._onExtRequestSeek);
+            document.addEventListener('waveformplayer:destroy', this._onExtDestroy);
         }
 
         // Rebuild the URL → players map from scratch each pass — cheap
@@ -575,8 +677,12 @@ export class WaveformBar {
 
     _observeDOM() {
         if (typeof MutationObserver === 'undefined') return;
+        // Triggers are handled by the single delegated listener, so the
+        // observer only needs to (re)discover late-mounted external-mode
+        // players and re-sync page state.
+        // TODO(harden): debounce this callback.
         this._observer = new MutationObserver(() => {
-            this._bindTriggers();
+            this._attachExternalPlayers();
             this._syncPageState();
         });
         this._observer.observe(document.body, {childList: true, subtree: true});
@@ -801,7 +907,9 @@ export class WaveformBar {
         // Visual feedback on bar button
         if (this.cartBtnEl) {
             this.cartBtnEl.classList.add('wb-action-done');
-            setTimeout(() => this.cartBtnEl.classList.remove('wb-action-done'), 1500);
+            setTimeout(() => {
+                if (this.cartBtnEl) this.cartBtnEl.classList.remove('wb-action-done');
+            }, 1500);
         }
 
         // Sync data attribute back to page triggers
@@ -995,6 +1103,15 @@ export class WaveformBar {
     _loadCurrentTrack() {
         const track = this.getCurrentTrack();
         if (!track || !this.player) return;
+
+        // Bump the load token and cancel any pending restore-seek so a
+        // stale async continuation (from a prior load) can't apply to this
+        // newer track under rapid switching.
+        this._loadSeq++;
+        if (this._restoreSeekTimeout) {
+            clearTimeout(this._restoreSeekTimeout);
+            this._restoreSeekTimeout = null;
+        }
 
         // Reset any previously-current external player so its UI flips
         // back to "paused" while the new track loads. The new track's
@@ -1451,7 +1568,17 @@ export class WaveformBar {
         }
         this._currentMarkerIndex = -1;
 
+        // Capture the load token so the async continuation below bails out if
+        // a newer load (user clicked another track, or destroy()) supersedes
+        // this restore before its promise / seek-timeout fires.
+        const seq = ++this._loadSeq;
+        if (this._restoreSeekTimeout) {
+            clearTimeout(this._restoreSeekTimeout);
+            this._restoreSeekTimeout = null;
+        }
+
         this.player.loadTrack(track.url, track.title, track.artist, loadOpts).then(() => {
+            if (this._loadSeq !== seq) return;
             if (this.player) this.player.setVolume(this.isMuted ? 0 : this.volume);
 
             if (state.isPlaying && this.config.autoResume) {
@@ -1474,7 +1601,9 @@ export class WaveformBar {
             // Seek after play — the audio element needs to be in a playing
             // or ready state for seek to stick reliably
             if (state.position > 0) {
-                setTimeout(() => {
+                this._restoreSeekTimeout = setTimeout(() => {
+                    this._restoreSeekTimeout = null;
+                    if (this._loadSeq !== seq) return;
                     if (this.player) {
                         this.player.seekTo(state.position);
                         this._lastPosition = state.position;
@@ -1491,7 +1620,10 @@ export class WaveformBar {
     _restoreVolume() {
         const data = restoreVolume(this.config.storageKey);
         if (!data) return;
-        this.volume = data.volume;
+        // Normalize persisted volume — a corrupted store could otherwise
+        // carry NaN / out-of-range and mute or break the player.
+        const v = Number(data.volume);
+        this.volume = Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 1;
         this.isMuted = data.muted;
         this._volumeBeforeMute = data.volumeBeforeMute;
         if (this.player) this.player.setVolume(this.isMuted ? 0 : this.volume);
