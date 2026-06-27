@@ -16,7 +16,7 @@ export function fireAction(actionConfig, payload) {
         try {
             actionConfig.endpoint(payload);
         } catch (err) {
-            console.warn('WaveformBar action callback error:', err);
+            console.warn('[WaveformBar] Action callback error:', err);
         }
         return;
     }
@@ -30,6 +30,6 @@ export function fireAction(actionConfig, payload) {
                 ...(actionConfig.headers || {})
             },
             body: JSON.stringify(payload)
-        }).catch(err => console.warn('WaveformBar action request failed:', err));
+        }).catch(err => console.warn('[WaveformBar] Action request failed:', err));
     }
 }
