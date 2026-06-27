@@ -44,7 +44,7 @@ const DEFAULTS = {
     waveformStyle: 'mirror',
     waveformHeight: 32,
     barWidth: 2,
-    barSpacing: 0,
+    barSpacing: 2,        // 2px gap between 2px bars — crisp, separated bars (0 = solid "blob")
     waveformColor: null,
     progressColor: null,
     markerColor: 'rgba(255, 255, 255, 0.25)',
@@ -129,9 +129,15 @@ export class WaveformBar {
         const v = Number(this.config.volume);
         this.volume = Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 1;
 
-        // Shareable timestamp: a `?<shareParam>=<seconds>` in the URL seeks the
-        // first-loaded track to that position (applied once in the player onLoad).
-        this._shareSeek = this._readShareSeek();
+        // Shareable timestamp: parse the share link's `?<shareParam>=<seconds>`
+        // (time) plus the track identity (`?wid` = id, `?wu` = url fallback,
+        // `?wtitle`/`?wartist` for display). When the link names a track we
+        // cold-load it below; a bare `?<shareParam>=` with no track just seeks
+        // whatever loads first (applied once in the player onLoad hook).
+        this._shareTarget = this._readShareTarget();
+        this._shareSeek = (this._shareTarget && !this._shareTarget.id && !this._shareTarget.url)
+            ? this._shareTarget.time
+            : null;
 
         if (typeof window.WaveformPlayer === 'undefined') {
             console.error('[WaveformBar] WaveformPlayer is required.');
@@ -155,6 +161,15 @@ export class WaveformBar {
 
         if (this.config.persist) {
             this._restoreState();
+        }
+
+        // A share link that names a track (`?wid`/`?wu`) cold-loads it here —
+        // AFTER restore, so the shared track wins over the visitor's own last
+        // session. It loads paused at the shared timestamp (autoplay is blocked
+        // on a cold page open anyway, and landing cued is the right UX).
+        if (this._shareTarget && (this._shareTarget.id || this._shareTarget.url)) {
+            const shared = this._resolveSharedTrack(this._shareTarget);
+            if (shared) this._loadSharedTrack(shared, this._shareTarget.time);
         }
 
         this.isInitialized = true;
@@ -1127,35 +1142,176 @@ export class WaveformBar {
     // =====================================================================
 
     /**
-     * Read a shareable-timestamp seek (seconds) from the URL's
-     * `?<shareParam>=`, or null when absent/invalid.
-     * @returns {number|null}
+     * Parse a share link from the URL: the timestamp (`?<shareParam>=`, seconds)
+     * plus the track identity needed to load it cold — `?wid` (id, preferred),
+     * `?wu` (url, the works-anywhere fallback), and `?wtitle`/`?wartist` for
+     * display before metadata arrives. Returns null when no share params are
+     * present. An unsafe `?wu` (javascript:/data: etc.) is dropped, not loaded.
+     * @returns {{time:number, id:string|null, url:string|null, title:string|null, artist:string|null}|null}
      * @private
      */
-    _readShareSeek() {
+    _readShareTarget() {
+        let q;
         try {
-            const raw = new URLSearchParams(window.location.search).get(this.config.shareParam);
-            if (raw == null) return null;
-            const t = Number(raw);
-            return Number.isFinite(t) && t >= 0 ? t : null;
+            q = new URLSearchParams(window.location.search);
         } catch (e) {
             return null;
         }
+        const rawTime = q.get(this.config.shareParam);
+        const id = q.get('wid');
+        const rawUrl = q.get('wu');
+        if (rawTime == null && id == null && rawUrl == null) return null;
+
+        let time = 0;
+        if (rawTime != null) {
+            const t = Number(rawTime);
+            if (Number.isFinite(t) && t >= 0) time = t;
+        }
+        // Only honour an embedded url that's a safe http(s)/relative target —
+        // the value is attacker-controllable, so never let it be javascript:.
+        const url = (rawUrl && isSafeHref(rawUrl)) ? rawUrl : null;
+
+        return {time, id: id || null, url, title: q.get('wtitle'), artist: q.get('wartist')};
     }
 
     /**
-     * Copy a shareable link to the current track at the current position
-     * (`?<shareParam>=<seconds>`), use the native share sheet when available,
-     * and emit `waveformbar:share`.
+     * Resolve a share target to a loadable track. Prefers an on-page trigger
+     * (matched by `data-wb-id`, then by url) so the cold load inherits the
+     * page's pre-generated peaks, markers, and favorite/cart state; falls back
+     * to a minimal track built from the embedded url + title/artist so the link
+     * still works on a page that doesn't contain the track.
+     * @param {{id:string|null, url:string|null, title:string|null, artist:string|null}} target
+     * @returns {Object|null}
+     * @private
+     */
+    _resolveSharedTrack(target) {
+        const triggers = document.querySelectorAll('[data-wb-play], [data-wb-queue]');
+
+        // 1. By id (clean, short links). Skips when no id was shared.
+        if (target.id) {
+            for (const el of triggers) {
+                if (el.dataset.wbId === target.id || el.dataset.id === target.id) {
+                    const t = parseTrackFromElement(el);
+                    if (t) return t;
+                }
+            }
+        }
+
+        // 2. By url — match an on-page trigger to inherit its peaks/state...
+        if (target.url) {
+            for (const el of triggers) {
+                if (el.dataset.wbUrl === target.url || el.dataset.url === target.url) {
+                    const t = parseTrackFromElement(el);
+                    if (t) return t;
+                }
+            }
+            // 3. ...else build a minimal track straight from the link (cross-page).
+            return {
+                url: target.url,
+                id: target.id || target.url,
+                title: target.title || extractTitle(target.url),
+                artist: target.artist || ''
+            };
+        }
+
+        return null;
+    }
+
+    /**
+     * Cold-load a share-target track at a timestamp, paused. Mirrors the
+     * restore path (loadTrack with autoplay:false + a `_loadSeq`-guarded,
+     * delayed seek) so a later user action cleanly supersedes it.
+     * @param {Object} track
+     * @param {number} time - seconds to seek to once loaded
+     * @private
+     */
+    _loadSharedTrack(track, time) {
+        if (!track || !track.url || !this.player) return;
+
+        // Make it the current queue entry (dedup by url, like play()).
+        const existing = this.queue.findIndex(t => t.url === track.url);
+        if (existing >= 0) {
+            this.queue[existing] = {...this.queue[existing], ...track};
+            this.currentIndex = existing;
+        } else {
+            this.queue.push(track);
+            this.currentIndex = this.queue.length - 1;
+        }
+
+        this.show();
+        this._updateTrackDisplay(track);
+        this._updateFavoriteUI();
+        this._updateNavButtons();
+
+        const loadOpts = {autoplay: false};
+        if (track.waveform) loadOpts.waveform = track.waveform;
+        if (track.markers && track.markers.length) {
+            const defaultColor = this.config.markerColor;
+            loadOpts.markers = track.markers.map(m => ({...m, color: m.color || defaultColor}));
+            this._activeMarkers = track.markers;
+        } else {
+            loadOpts.markers = [];
+            this._activeMarkers = null;
+        }
+        this._currentMarkerIndex = -1;
+
+        const seq = ++this._loadSeq;
+        if (this._restoreSeekTimeout) {
+            clearTimeout(this._restoreSeekTimeout);
+            this._restoreSeekTimeout = null;
+        }
+
+        this.player.loadTrack(track.url, track.title, track.artist, loadOpts).then(() => {
+            if (this._loadSeq !== seq) return;
+            if (this.player) this.player.setVolume(this.isMuted ? 0 : this.volume);
+            // Seek slightly after load — the audio element needs to be ready
+            // for the seek to stick (same 100ms guard the restore path uses).
+            if (time > 0) {
+                this._restoreSeekTimeout = setTimeout(() => {
+                    this._restoreSeekTimeout = null;
+                    if (this._loadSeq !== seq) return;
+                    if (this.player) {
+                        this.player.seekTo(time);
+                        this._lastPosition = time;
+                    }
+                }, 100);
+            }
+        }).catch(() => {});
+
+        this._renderQueue();
+        this._syncPageState();
+        this._saveState();
+        this._updateNavButtons();
+        this._emit('trackchange', {track, index: this.currentIndex});
+        if (this.config.onTrackChange) this.config.onTrackChange(track, this.currentIndex);
+    }
+
+    /**
+     * Copy a shareable link to the current track at the current position, use
+     * the native share sheet when available, and emit `waveformbar:share`. The
+     * link carries both the timestamp AND the track identity so a cold open
+     * loads the right audio: `?<shareParam>=<seconds>` plus `wid` (id, when the
+     * track has a real one), `wu` (url — the works-anywhere fallback), and
+     * `wtitle`/`wartist` for display before metadata loads.
      * @private
      */
     _share() {
+        const track = this.getCurrentTrack();
         const cur = this.player && this.player.audio ? this.player.audio.currentTime : 0;
         const seconds = Math.max(0, Math.floor(cur || 0));
         let link;
         try {
             const url = new URL(window.location.href);
-            url.searchParams.set(this.config.shareParam, String(seconds));
+            const p = url.searchParams;
+            p.set(this.config.shareParam, String(seconds));
+            if (track) {
+                // id falls back to url internally, so only emit wid when it's a
+                // real, distinct identifier (clean per-track-page links).
+                if (track.id && track.id !== track.url) p.set('wid', track.id);
+                if (track.url) p.set('wu', track.url);
+                if (track.title) p.set('wtitle', track.title);
+                if (track.artist) p.set('wartist', track.artist);
+            }
             link = url.toString();
         } catch (e) {
             return;
@@ -1164,11 +1320,10 @@ export class WaveformBar {
             navigator.clipboard.writeText(link).catch(() => {});
         }
         if (navigator.share) {
-            const track = this.getCurrentTrack();
             navigator.share({title: (track && track.title) || undefined, url: link}).catch(() => {});
         }
         this._flashShareCopied();
-        this._emit('share', {url: link, time: seconds, track: this.getCurrentTrack()});
+        this._emit('share', {url: link, time: seconds, track});
     }
 
     /**

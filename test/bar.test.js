@@ -224,4 +224,56 @@ describe('shareable timestamps', () => {
 
 		history.replaceState({}, '', '/');    // reset for other tests
 	});
+
+	it('share link embeds the track identity (wid + wu + wtitle)', () => {
+		const writeText = vi.fn().mockResolvedValue(undefined);
+		Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+		document.body.innerHTML =
+			'<button data-wb-play data-wb-id="beat1" data-wb-url="x.mp3" data-wb-title="Beat One" data-wb-artist="DJ">Play</button>';
+		const bar = makeBar({ persist: false, share: true });
+		document.querySelector('[data-wb-play]').click();   // make it the current track
+		MockPlayer.last.audio.currentTime = 12;
+
+		bar.barEl.querySelector('.wb-share').click();
+		const link = writeText.mock.calls.at(-1)[0];
+		expect(link).toMatch(/[?&]wt=12\b/);
+		expect(link).toMatch(/[?&]wid=beat1\b/);
+		expect(link).toContain('wu=x.mp3');
+		expect(link).toMatch(/wtitle=Beat(\+|%20)One/);
+	});
+
+	it('cold-loads a shared track by id (paused) and seeks after load', async () => {
+		document.body.innerHTML =
+			'<button data-wb-play data-wb-id="beat1" data-wb-url="x.mp3" data-wb-title="Beat One">Play</button>';
+		history.replaceState({}, '', '/?wt=70&wid=beat1');
+		const bar = makeBar({ persist: false });
+		const player = MockPlayer.last;
+
+		expect(bar.getCurrentTrack()?.url).toBe('x.mp3');
+		expect(player.loadCalls.at(-1).opts.autoplay).toBe(false);   // paused, not autoplay
+
+		const seekSpy = vi.spyOn(player, 'seekTo');
+		await Promise.resolve();                       // run loadTrack().then()
+		await new Promise((r) => setTimeout(r, 130));  // pass the 100ms seek delay
+		expect(seekSpy).toHaveBeenCalledWith(70);
+
+		history.replaceState({}, '', '/');
+	});
+
+	it('falls back to the embedded url when the page has no matching trigger', () => {
+		history.replaceState({}, '', '/?wt=5&wu=' + encodeURIComponent('https://cdn.example/x.mp3') + '&wtitle=Cold');
+		const bar = makeBar({ persist: false });
+		const track = bar.getCurrentTrack();
+		expect(track?.url).toBe('https://cdn.example/x.mp3');
+		expect(track?.title).toBe('Cold');
+		history.replaceState({}, '', '/');
+	});
+
+	it('refuses to load an unsafe embedded url', () => {
+		history.replaceState({}, '', '/?wt=5&wu=' + encodeURIComponent('javascript:alert(1)'));
+		const bar = makeBar({ persist: false });
+		expect(bar.getCurrentTrack()).toBe(null);
+		expect(MockPlayer.last.loadCalls.length).toBe(0);
+		history.replaceState({}, '', '/');
+	});
 });
