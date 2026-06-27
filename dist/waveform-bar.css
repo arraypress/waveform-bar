@@ -81,7 +81,8 @@
    ========================================================================== */
 
 .wb-inner {
-    max-width: 1400px;
+    /* Override via the `wide` / `maxWidth` options (sets --wb-max-width on the bar). */
+    max-width: var(--wb-max-width, 1400px);
     margin: 0 auto;
     padding: 0.5rem 1.5rem;
     display: flex;

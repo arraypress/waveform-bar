@@ -329,6 +329,10 @@
     // URL to fallback artwork image
     theme: null,
     // 'dark', 'light', or null (dark by default)
+    wide: false,
+    // true = content spans full width (lifts the 1400px cap)
+    maxWidth: null,
+    // custom content max-width (CSS value), e.g. '1200px'; overrides `wide`
     waveformStyle: "mirror",
     waveformHeight: 32,
     barWidth: 2,
@@ -511,6 +515,8 @@
       const theme = this.config.theme || this._detectTheme();
       if (theme === "light") this.barEl.classList.add("wb-light");
       this._resolvedTheme = theme;
+      const maxWidth = this.config.maxWidth || (this.config.wide ? "100%" : null);
+      if (maxWidth) this.barEl.style.setProperty("--wb-max-width", maxWidth);
       this.barEl.id = "waveform-bar";
       this.barEl.innerHTML = buildBarHTML(this.config);
       document.body.appendChild(this.barEl);
