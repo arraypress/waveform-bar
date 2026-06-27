@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.2] - 2026-06-27
+
+### Changed
+
+- Raised the `@arraypress/waveform-player` peer dependency floor to `^1.7.2`, which ships the native accessible (keyboard / ARIA) seek slider. In external mode the player dispatches `waveformplayer:request-seek` on keyboard seek — already handled by the bar — so keyboard seeking on inline player surfaces now routes through the bar with no code changes here.
+
 ## [1.3.1] - 2026-05-13
 
 ### Fixed
