@@ -13,8 +13,9 @@
     --wb-border: rgba(255, 255, 255, 0.1);
     --wb-text: #ffffff;
     --wb-text-muted: rgba(255, 255, 255, 0.5);
-    --wb-accent: #a855f7;
-    --wb-accent-light: #c084fc;
+    --wb-accent: #fafafa;
+    --wb-accent-light: #e4e4e7;
+    --wb-on-accent: #18181b;
     --wb-hover: rgba(255, 255, 255, 0.08);
     --wb-tag-bg: rgba(255, 255, 255, 0.08);
     --wb-tag-text: rgba(255, 255, 255, 0.7);
@@ -28,6 +29,9 @@
     --wb-border: rgba(0, 0, 0, 0.1);
     --wb-text: #1a1a1a;
     --wb-text-muted: rgba(0, 0, 0, 0.5);
+    --wb-accent: #18181b;
+    --wb-accent-light: #3f3f46;
+    --wb-on-accent: #fafafa;
     --wb-hover: rgba(0, 0, 0, 0.05);
     --wb-tag-bg: rgba(0, 0, 0, 0.06);
     --wb-tag-text: rgba(0, 0, 0, 0.6);
@@ -162,12 +166,12 @@
     width: 40px;
     height: 40px;
     background: var(--wb-accent);
-    color: #fff;
+    color: var(--wb-on-accent);
 }
 
 .wb-play:hover {
     background: var(--wb-accent-light);
-    color: #fff;
+    color: var(--wb-on-accent);
     transform: scale(1.05);
 }
 
@@ -340,7 +344,7 @@
 
 .wb-tag-bpm {
     color: var(--wb-accent);
-    background: rgba(168, 85, 247, 0.12);
+    background: color-mix(in srgb, var(--wb-accent) 12%, transparent);
 }
 
 .wb-tag-key {
@@ -498,7 +502,7 @@
 }
 
 .wb-repeat.wb-repeat-active:hover {
-    background: rgba(168, 85, 247, 0.12);
+    background: color-mix(in srgb, var(--wb-accent) 12%, transparent);
 }
 
 /* ==========================================================================
@@ -507,7 +511,7 @@
 
 .wb-queue-btn.wb-active {
     color: var(--wb-accent);
-    background: rgba(168, 85, 247, 0.12);
+    background: color-mix(in srgb, var(--wb-accent) 12%, transparent);
 }
 
 /* ==========================================================================
@@ -568,7 +572,7 @@
 }
 
 .wb-queue-count {
-    background: rgba(168, 85, 247, 0.15);
+    background: color-mix(in srgb, var(--wb-accent) 15%, transparent);
     color: var(--wb-accent);
     padding: 0.1rem 0.45rem;
     border-radius: 10px;
@@ -637,7 +641,7 @@
 }
 
 .wb-queue-current {
-    background: rgba(168, 85, 247, 0.1);
+    background: color-mix(in srgb, var(--wb-accent) 10%, transparent);
 }
 
 .wb-queue-num {
@@ -799,12 +803,12 @@
 }
 
 .wb-card-highlight.wb-current {
-    border-color: var(--wb-accent, #a855f7);
-    box-shadow: 0 0 0 1px var(--wb-accent, #a855f7);
+    border-color: var(--wb-accent);
+    box-shadow: 0 0 0 1px var(--wb-accent);
 }
 
 .wb-current .wb-accent-current {
-    color: var(--wb-accent, #a855f7);
+    color: var(--wb-accent);
 }
 
 .wb-pulse-playing.wb-playing {
