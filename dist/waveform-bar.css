@@ -435,15 +435,18 @@
     writing-mode: vertical-lr;
     direction: rtl;
     width: 6px;
-    height: 100px;
+    height: 120px;
     background: transparent;
     outline: none;
     cursor: pointer;
 }
 
-/* Track — Webkit (Chrome/Safari/Edge) */
+/* Track — Webkit (Chrome/Safari/Edge).
+   `height: 100%` is load-bearing: without an explicit length the vertical
+   track collapses in some engines, leaving a stubby toggle-looking popup. */
 .wb-volume-slider::-webkit-slider-runnable-track {
     width: 6px;
+    height: 100%;
     background: var(--wb-border);
     border-radius: 3px;
 }
@@ -467,6 +470,7 @@
 /* Track — Firefox */
 .wb-volume-slider::-moz-range-track {
     width: 6px;
+    height: 100%;
     background: var(--wb-border);
     border-radius: 3px;
     border: none;
