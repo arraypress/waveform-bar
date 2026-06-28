@@ -410,9 +410,11 @@
     -webkit-backdrop-filter: blur(20px);
     border: 1px solid var(--wb-border);
     border-radius: 10px;
-    padding: 1rem 0.5rem;
     box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.4);
     z-index: 10000;
+    /* Fixed box that holds the rotated slider (see below). */
+    width: 40px;
+    height: 132px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -429,37 +431,39 @@
     transform: translateX(-50%) translateY(0);
 }
 
+/* A normal HORIZONTAL range input rotated -90deg — the only vertical-slider
+   technique that renders + drags reliably across engines. `writing-mode:
+   vertical` collapses the input to ~6px in Chrome 124+ (height is ignored),
+   leaving an ungrabbable dot. width = the volume travel; height = thickness.
+   rotate(-90deg) puts max (loud) at the top, 0 (mute) at the bottom. */
 .wb-volume-slider {
     -webkit-appearance: none;
     appearance: none;
-    writing-mode: vertical-lr;
-    direction: rtl;
-    width: 6px;
-    height: 120px;
+    width: 104px;
+    height: 6px;
+    transform: rotate(-90deg);
     background: transparent;
     outline: none;
     cursor: pointer;
 }
 
-/* Track — Webkit (Chrome/Safari/Edge).
-   `height: 100%` is load-bearing: without an explicit length the vertical
-   track collapses in some engines, leaving a stubby toggle-looking popup. */
+/* Track — Webkit (Chrome/Safari/Edge) */
 .wb-volume-slider::-webkit-slider-runnable-track {
-    width: 6px;
-    height: 100%;
+    width: 100%;
+    height: 6px;
     background: var(--wb-border);
     border-radius: 3px;
 }
 
-/* Thumb — Webkit */
+/* Thumb — Webkit (margin-top centers the 16px thumb on the 6px track) */
 .wb-volume-slider::-webkit-slider-thumb {
     -webkit-appearance: none;
     width: 16px;
     height: 16px;
+    margin-top: -5px;
     background: var(--wb-accent);
     border-radius: 50%;
     cursor: pointer;
-    margin-left: -5px;
     transition: transform 0.15s;
 }
 
@@ -469,8 +473,8 @@
 
 /* Track — Firefox */
 .wb-volume-slider::-moz-range-track {
-    width: 6px;
-    height: 100%;
+    width: 100%;
+    height: 6px;
     background: var(--wb-border);
     border-radius: 3px;
     border: none;

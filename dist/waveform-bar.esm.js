@@ -218,7 +218,7 @@ function buildBarHTML(config) {
     right += `<button class="wb-btn wb-btn-sm wb-mute" aria-label="Volume" title="Volume">${ICONS.volHigh}</button>`;
     if (config.showVolume) {
       right += `<div class="wb-volume-popup">
-                <input type="range" class="wb-volume-slider" min="0" max="100" value="100" orient="vertical" aria-label="Volume">
+                <input type="range" class="wb-volume-slider" min="0" max="100" value="100" aria-label="Volume">
             </div>`;
     }
     right += "</div>";
