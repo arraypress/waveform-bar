@@ -191,7 +191,6 @@
 .wb-artwork {
     width: 40px;
     height: 40px;
-    border-radius: 6px;
     background: linear-gradient(135deg, var(--wb-accent), var(--wb-accent-light));
     display: flex;
     align-items: center;
