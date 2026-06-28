@@ -20,8 +20,6 @@
     "build:min": "esbuild src/js/index.js --bundle --format=iife --minify --outfile=dist/waveform-bar.min.js",
     "dev": "esbuild src/js/index.js --bundle --format=iife --outfile=dist/waveform-bar.js --watch",
     "serve": "npx http-server -p 8000",
-    "demo": "npm run build && npm run demo:vendor && npx http-server demo -p 4399 -c-1 -o",
-    "demo:vendor": "mkdir -p demo/vendor && cp -f dist/waveform-bar.js dist/waveform-bar.css ../waveform-player/dist/waveform-player.js ../waveform-player/dist/waveform-player.css demo/vendor/",
     "size": "npm run build && echo 'JS:' && gzip -c dist/waveform-bar.min.js | wc -c && echo 'CSS:' && gzip -c dist/waveform-bar.min.css | wc -c",
     "test": "vitest run",
     "test:watch": "vitest",
