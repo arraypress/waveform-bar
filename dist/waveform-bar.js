@@ -436,6 +436,7 @@
       this._initPlayer();
       this._bindTriggers();
       this._observeDOM();
+      this._watchTheme();
       if (this.config.persist) {
         this._restoreVolume();
         this._restoreFavorites();
@@ -461,6 +462,15 @@
       if (this.player) {
         this.player.destroy();
         this.player = null;
+      }
+      if (this._themeObserver) {
+        this._themeObserver.disconnect();
+        this._themeObserver = null;
+      }
+      if (this._themeMq && this._themeMqHandler) {
+        this._themeMq.removeEventListener("change", this._themeMqHandler);
+        this._themeMq = null;
+        this._themeMqHandler = null;
       }
       if (this._docClickVolume) {
         document.removeEventListener("click", this._docClickVolume);
@@ -1698,6 +1708,43 @@
       }
       if (window.matchMedia?.("(prefers-color-scheme: light)").matches) return "light";
       return "dark";
+    }
+    /**
+     * Re-detect the page theme and toggle the bar's `wb-light` class (on the bar
+     * and the queue panel) to match, so the bar adapts to a runtime light/dark
+     * switch — not just the theme present when it was first shown. No-op when
+     * `config.theme` is set explicitly.
+     * @private
+     */
+    _refreshTheme() {
+      if (this.config && this.config.theme) return;
+      const theme = this._detectTheme();
+      if (theme === this._resolvedTheme) return;
+      this._resolvedTheme = theme;
+      const light = theme === "light";
+      if (this.barEl) this.barEl.classList.toggle("wb-light", light);
+      if (this.queueEl) this.queueEl.classList.toggle("wb-light", light);
+    }
+    /**
+     * Watch the document for theme changes — a class/attribute flip on
+     * `<html>`/`<body>` (Tailwind `dark`, `data-theme`, `data-color-scheme`) or
+     * an OS `prefers-color-scheme` change — and re-detect. Event-driven
+     * (MutationObserver + matchMedia), never a timer. Torn down in destroy().
+     * @private
+     */
+    _watchTheme() {
+      if (typeof document === "undefined") return;
+      const refresh = () => requestAnimationFrame(() => this._refreshTheme());
+      const opts = { attributes: true, attributeFilter: ["class", "data-theme", "data-color-scheme", "style"] };
+      this._themeObserver = new MutationObserver(refresh);
+      this._themeObserver.observe(document.documentElement, opts);
+      if (document.body) this._themeObserver.observe(document.body, opts);
+      try {
+        this._themeMq = window.matchMedia("(prefers-color-scheme: dark)");
+        this._themeMqHandler = refresh;
+        this._themeMq.addEventListener("change", this._themeMqHandler);
+      } catch (e) {
+      }
     }
     _updateFavoriteUI() {
       if (!this.favBtnEl) return;
