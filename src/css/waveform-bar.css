@@ -441,6 +441,10 @@
     appearance: none;
     width: 104px;
     height: 6px;
+    /* The popup is a 40px-wide flex box; without this the 104px slider is
+       shrunk to fit (flex items default to flex-shrink:1 + min-width:auto),
+       collapsing the rotated track to a tiny stub. Keep its full travel. */
+    flex-shrink: 0;
     transform: rotate(-90deg);
     background: transparent;
     outline: none;

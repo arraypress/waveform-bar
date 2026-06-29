@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.3] - 2026-06-30
+
+### Fixed
+
+- **Volume slider rendered as a tiny stub.** The vertical slider is a horizontal
+  range input rotated -90°, but the 40px-wide flex popup shrank the 104px input
+  to fit (flex items default to `flex-shrink: 1` + `min-width: auto`), collapsing
+  the track. Pinned `flex-shrink: 0` so it keeps its full travel.
+
 ## [1.3.2] - 2026-06-27
 
 ### Changed
