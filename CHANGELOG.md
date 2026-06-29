@@ -2,14 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.6.3] - 2026-06-30
+## [1.6.4] - 2026-06-30
 
 ### Fixed
 
-- **Volume slider rendered as a tiny stub.** The vertical slider is a horizontal
-  range input rotated -90°, but the 40px-wide flex popup shrank the 104px input
-  to fit (flex items default to `flex-shrink: 1` + `min-width: auto`), collapsing
-  the track. Pinned `flex-shrink: 0` so it keeps its full travel.
+- **Volume slider collapsed to a tiny stub when the host page styles range
+  inputs.** The vertical slider is a horizontal range input rotated -90°. A
+  generic `input[type="range"] { width: 100% }` on the host page (specificity
+  `0,1,1`) out-specified the bar's `.wb-volume-slider` rule (`0,1,0`), shrinking
+  the slider to the 40px popup width — a 40px stub after rotation. The bar's
+  slider rules are now scoped under `.wb-volume-popup` (`0,2,0`, plus a pinned
+  `flex-shrink: 0`) so the bar's own sizing wins regardless of host form-control
+  styles.
 
 ## [1.3.2] - 2026-06-27
 

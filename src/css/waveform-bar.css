@@ -436,7 +436,7 @@
    vertical` collapses the input to ~6px in Chrome 124+ (height is ignored),
    leaving an ungrabbable dot. width = the volume travel; height = thickness.
    rotate(-90deg) puts max (loud) at the top, 0 (mute) at the bottom. */
-.wb-volume-slider {
+.wb-volume-popup .wb-volume-slider {
     -webkit-appearance: none;
     appearance: none;
     width: 104px;
@@ -452,7 +452,7 @@
 }
 
 /* Track — Webkit (Chrome/Safari/Edge) */
-.wb-volume-slider::-webkit-slider-runnable-track {
+.wb-volume-popup .wb-volume-slider::-webkit-slider-runnable-track {
     width: 100%;
     height: 6px;
     background: var(--wb-border);
@@ -460,7 +460,7 @@
 }
 
 /* Thumb — Webkit (margin-top centers the 16px thumb on the 6px track) */
-.wb-volume-slider::-webkit-slider-thumb {
+.wb-volume-popup .wb-volume-slider::-webkit-slider-thumb {
     -webkit-appearance: none;
     width: 16px;
     height: 16px;
@@ -471,12 +471,12 @@
     transition: transform 0.15s;
 }
 
-.wb-volume-slider::-webkit-slider-thumb:hover {
+.wb-volume-popup .wb-volume-slider::-webkit-slider-thumb:hover {
     transform: scale(1.2);
 }
 
 /* Track — Firefox */
-.wb-volume-slider::-moz-range-track {
+.wb-volume-popup .wb-volume-slider::-moz-range-track {
     width: 100%;
     height: 6px;
     background: var(--wb-border);
@@ -485,7 +485,7 @@
 }
 
 /* Thumb — Firefox */
-.wb-volume-slider::-moz-range-thumb {
+.wb-volume-popup .wb-volume-slider::-moz-range-thumb {
     width: 16px;
     height: 16px;
     background: var(--wb-accent);
@@ -494,7 +494,7 @@
     cursor: pointer;
 }
 
-.wb-volume-slider::-moz-range-thumb:hover {
+.wb-volume-popup .wb-volume-slider::-moz-range-thumb:hover {
     transform: scale(1.2);
 }
 
