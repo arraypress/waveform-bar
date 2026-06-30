@@ -5,6 +5,7 @@
     pause: '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>',
     prev: '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>',
     next: '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>',
+    shuffle: '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M10.59 9.17 5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>',
     queue: '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>',
     share: '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>',
     music: '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" opacity="0.5"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55C7.79 13 6 14.79 6 17s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>',
@@ -171,67 +172,87 @@
   }
 
   // src/js/dom.js
-  function buildBarHTML(config) {
-    let left = '<div class="wb-left">';
-    left += '<div class="wb-controls">';
-    if (config.showPrevNext) {
-      left += `<button class="wb-btn wb-prev" aria-label="Previous" title="Previous">${ICONS.prev}</button>`;
+  function buildControls(config) {
+    let s = '<div class="wb-controls">';
+    if (config.showShuffle) {
+      s += `<button class="wb-btn wb-btn-sm wb-shuffle" aria-label="Shuffle" title="Shuffle: Off" aria-pressed="false">${ICONS.shuffle}</button>`;
     }
-    left += `<button class="wb-btn wb-play" aria-label="Play/Pause" title="Play">
-        <span class="wb-icon-play">${ICONS.play}</span>
-        <span class="wb-icon-pause" style="display:none">${ICONS.pause}</span>
-    </button>`;
     if (config.showPrevNext) {
-      left += `<button class="wb-btn wb-next" aria-label="Next" title="Next">${ICONS.next}</button>`;
+      s += `<button class="wb-btn wb-prev" aria-label="Previous" title="Previous">${ICONS.prev}</button>`;
+    }
+    s += `<button class="wb-btn wb-play" aria-label="Play/Pause" title="Play"><span class="wb-icon-play">${ICONS.play}</span><span class="wb-icon-pause" style="display:none">${ICONS.pause}</span></button>`;
+    if (config.showPrevNext) {
+      s += `<button class="wb-btn wb-next" aria-label="Next" title="Next">${ICONS.next}</button>`;
     }
     if (config.showRepeat) {
-      left += `<button class="wb-btn wb-btn-sm wb-repeat" aria-label="Repeat" title="Repeat: Off">${ICONS.repeatOff}</button>`;
+      s += `<button class="wb-btn wb-btn-sm wb-repeat" aria-label="Repeat" title="Repeat: Off">${ICONS.repeatOff}</button>`;
     }
-    left += "</div>";
-    left += `<div class="wb-track">
+    s += "</div>";
+    return s;
+  }
+  function buildTrack() {
+    return `<div class="wb-track">
         <div class="wb-artwork">${ICONS.music}</div>
         <div class="wb-track-text">
             <div class="wb-title">No track selected</div>
             <div class="wb-artist">&mdash;</div>
         </div>
     </div>`;
-    left += "</div>";
+  }
+  function buildMeta(config) {
+    return config.showMeta ? '<div class="wb-meta"></div>' : "";
+  }
+  function buildRightControls(config) {
+    let s = "";
+    if (config.actions) {
+      s += '<div class="wb-actions">';
+      if (config.actions.favorite) {
+        s += `<button class="wb-btn wb-btn-sm wb-fav" aria-label="Favorite" title="Favorite">${ICONS.heart}</button>`;
+      }
+      if (config.actions.cart) {
+        s += `<button class="wb-btn wb-btn-sm wb-cart" aria-label="Add to cart" title="Add to Cart">${ICONS.cart}</button>`;
+      }
+      s += "</div>";
+    }
+    if (config.showMute || config.showVolume) {
+      s += '<div class="wb-volume">';
+      s += `<button class="wb-btn wb-btn-sm wb-mute" aria-label="Volume" title="Volume">${ICONS.volHigh}</button>`;
+      if (config.showVolume) {
+        s += `<div class="wb-volume-popup">
+                <input type="range" class="wb-volume-slider" min="0" max="100" value="100" aria-label="Volume">
+            </div>`;
+      }
+      s += "</div>";
+    }
+    if (config.share) {
+      s += `<button class="wb-btn wb-btn-sm wb-share" aria-label="Share" title="Copy share link">${ICONS.share}</button>`;
+    }
+    if (config.showQueue) {
+      s += `<button class="wb-btn wb-btn-sm wb-queue-btn" aria-label="Queue" title="Queue">${ICONS.queue}</button>`;
+    }
+    return s;
+  }
+  function buildCollapse(config) {
+    return config.collapsible ? `<button class="wb-btn wb-btn-sm wb-collapse" aria-label="Collapse" title="Collapse">${ICONS.collapse}</button>` : "";
+  }
+  function buildBarHTML(config) {
+    const controls = buildControls(config);
+    const track = buildTrack();
+    const meta = buildMeta(config);
+    const rightControls = buildRightControls(config);
+    const collapse = buildCollapse(config);
+    if (config.layout === "center") {
+      const left2 = `<div class="wb-left">${track}${meta}</div>`;
+      const centre2 = `<div class="wb-centre">${controls}<div class="wb-seek"><span class="wb-time-current">0:00</span><div class="wb-waveform-container"></div><span class="wb-time-total">0:00</span></div></div>`;
+      const right2 = `<div class="wb-right">${rightControls}</div>`;
+      return `<div class="wb-inner">${left2}${centre2}${right2}${collapse}</div>`;
+    }
+    const left = `<div class="wb-left">${controls}${track}</div>`;
     const centre = `<div class="wb-centre">
         <div class="wb-waveform-container"></div>
         <div class="wb-time"><span class="wb-time-current">0:00</span> / <span class="wb-time-total">0:00</span></div>
     </div>`;
-    let right = '<div class="wb-right">';
-    if (config.showMeta) {
-      right += '<div class="wb-meta"></div>';
-    }
-    if (config.actions) {
-      right += '<div class="wb-actions">';
-      if (config.actions.favorite) {
-        right += `<button class="wb-btn wb-btn-sm wb-fav" aria-label="Favorite" title="Favorite">${ICONS.heart}</button>`;
-      }
-      if (config.actions.cart) {
-        right += `<button class="wb-btn wb-btn-sm wb-cart" aria-label="Add to cart" title="Add to Cart">${ICONS.cart}</button>`;
-      }
-      right += "</div>";
-    }
-    if (config.showMute || config.showVolume) {
-      right += '<div class="wb-volume">';
-      right += `<button class="wb-btn wb-btn-sm wb-mute" aria-label="Volume" title="Volume">${ICONS.volHigh}</button>`;
-      if (config.showVolume) {
-        right += `<div class="wb-volume-popup">
-                <input type="range" class="wb-volume-slider" min="0" max="100" value="100" aria-label="Volume">
-            </div>`;
-      }
-      right += "</div>";
-    }
-    if (config.share) {
-      right += `<button class="wb-btn wb-btn-sm wb-share" aria-label="Share" title="Copy share link">${ICONS.share}</button>`;
-    }
-    if (config.showQueue) {
-      right += `<button class="wb-btn wb-btn-sm wb-queue-btn" aria-label="Queue" title="Queue">${ICONS.queue}</button>`;
-    }
-    right += "</div>";
-    const collapse = config.collapsible ? `<button class="wb-btn wb-btn-sm wb-collapse" aria-label="Collapse" title="Collapse">${ICONS.collapse}</button>` : "";
+    const right = `<div class="wb-right">${meta}${rightControls}</div>`;
     return `<div class="wb-inner">${left}${centre}${right}${collapse}</div>`;
   }
 
@@ -323,7 +344,11 @@
     continuous: true,
     repeat: "off",
     // 'off', 'all', 'one'
+    shuffle: false,
+    // true = random queue advance (next / auto-advance pick a random track)
     showRepeat: true,
+    showShuffle: false,
+    // show a shuffle toggle button in the transport cluster
     showQueue: true,
     showPrevNext: true,
     showVolume: true,
@@ -337,15 +362,17 @@
     theme: null,
     // 'dark', 'light', or null (dark by default)
     wide: false,
-    // true = content spans full width (lifts the 1400px cap)
-    maxWidth: null,
-    // custom content max-width (CSS value), e.g. '1200px'; overrides `wide`
+    // two sizes — false = default (1400px cap), true = full width. Applies to waveform mode only.
     position: "bottom",
     // 'bottom' (default) or 'top' — which edge the bar docks to
     collapsible: false,
     // show a collapse button that shrinks the bar to a floating transport pill
+    // mode: 'waveform' (default layout + waveform, width-adjustable) | 'classic'
+    // (Spotify-style centre layout + seekbar, full-width). NOT defaulted here —
+    // its default is inferred from `waveform`/`layout` in init() so the legacy
+    // options still work; see the derivation there.
     waveform: true,
-    // false = classic Spotify-style seek bar instead of the waveform
+    // internal seek style; classic mode forces seekbar
     errorText: null,
     // custom "audio failed to load" message (null = player default)
     share: false,
@@ -368,6 +395,7 @@
     onTrackChange: null,
     onQueueChange: null,
     onVolumeChange: null,
+    onShuffleChange: null,
     onFavorite: null,
     onCart: null
   };
@@ -390,6 +418,7 @@
       this._activeMarkers = null;
       this._currentMarkerIndex = -1;
       this.repeat = "off";
+      this.shuffle = false;
       this._loadSeq = 0;
       this._restoreSeekTimeout = null;
       this._externalPlayers = /* @__PURE__ */ new Map();
@@ -402,6 +431,7 @@
       this.metaEl = null;
       this.playBtnEl = null;
       this.repeatBtnEl = null;
+      this.shuffleBtnEl = null;
       this.queueBtnEl = null;
       this.queueBodyEl = null;
       this.queueCountEl = null;
@@ -425,6 +455,13 @@
       this.config = { ...DEFAULTS, ...config };
       const v = Number(this.config.volume);
       this.volume = Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 1;
+      let mode = this.config.mode;
+      if (mode !== "classic" && mode !== "waveform") {
+        mode = this.config.layout === "center" || this.config.waveform === false ? "classic" : "waveform";
+      }
+      this.config.mode = mode;
+      this.config.layout = mode === "classic" ? "center" : "default";
+      this.config.waveform = mode !== "classic";
       this._shareTarget = this._readShareTarget();
       this._shareSeek = this._shareTarget && !this._shareTarget.id && !this._shareTarget.url ? this._shareTarget.time : null;
       if (typeof window.WaveformPlayer === "undefined") {
@@ -526,6 +563,7 @@
       this.metaEl = null;
       this.playBtnEl = null;
       this.repeatBtnEl = null;
+      this.shuffleBtnEl = null;
       this.waveformContainer = null;
       this.queueBodyEl = null;
       this.queueCountEl = null;
@@ -553,9 +591,11 @@
       const theme = this.config.theme || this._detectTheme();
       if (theme === "light") this.barEl.classList.add("wb-light");
       this._resolvedTheme = theme;
-      const maxWidth = this.config.maxWidth || (this.config.wide ? "100%" : null);
-      if (maxWidth) this.barEl.style.setProperty("--wb-max-width", maxWidth);
+      if (this.config.mode === "waveform" && this.config.wide) {
+        this.barEl.style.setProperty("--wb-max-width", "100%");
+      }
       if (this.config.position === "top") this.barEl.classList.add("wb-top");
+      if (this.config.layout === "center") this.barEl.classList.add("wb-layout-center");
       this.barEl.id = "waveform-bar";
       this.barEl.innerHTML = buildBarHTML(this.config);
       document.body.appendChild(this.barEl);
@@ -588,6 +628,12 @@
         this.repeat = this.config.repeat || "off";
         this._updateRepeatButton();
         this.repeatBtnEl.addEventListener("click", () => this.cycleRepeat());
+      }
+      this.shuffle = !!this.config.shuffle;
+      this.shuffleBtnEl = this.barEl.querySelector(".wb-shuffle");
+      if (this.shuffleBtnEl) {
+        this._updateShuffleButton();
+        this.shuffleBtnEl.addEventListener("click", () => this.toggleShuffle());
       }
       if (this.queueBtnEl) this.queueBtnEl.addEventListener("click", () => this.toggleQueuePanel());
       this.volumePopupEl = this.barEl.querySelector(".wb-volume-popup");
@@ -652,12 +698,20 @@
         // a simple rounded progress bar (no waveform), with the player's
         // native click-to-seek. No custom seek-bar DOM needed.
         waveformStyle: this.config.waveform === false ? "seekbar" : this.config.waveformStyle,
-        height: this.config.waveformHeight,
+        // Slim host for the classic seekbar so it doesn't inflate the bar.
+        // 20px gives a comfortable drag hit-area; the visual `.wb-seek` row
+        // is held to ~16px and the host overflows it a touch. The waveform
+        // keeps its configured height.
+        height: this.config.waveform === false ? 20 : this.config.waveformHeight,
         barWidth: this.config.barWidth,
         barSpacing: this.config.barSpacing,
         errorText: this.config.errorText,
         // null -> player uses its own default
         singlePlay: false,
+        // Time tooltip + draggable seek handle (the compact-transport seek
+        // affordances) — on for the bar, off by default for standalone players.
+        showHoverTime: true,
+        seekHandle: true,
         onPlay: () => {
           this.isPlaying = true;
           this._updatePlayButton();
@@ -691,11 +745,16 @@
             }
             return;
           }
+          if (this.shuffle && this.config.continuous && this.queue.length > 1) {
+            this.currentIndex = this._randomIndex();
+            this._loadCurrentTrack();
+            return;
+          }
           if (this.config.continuous && this.currentIndex < this.queue.length - 1) {
             this.currentIndex++;
             this._loadCurrentTrack();
           } else if (this.repeat === "all" && this.queue.length > 0) {
-            this.currentIndex = 0;
+            this.currentIndex = this.shuffle && this.queue.length > 1 ? this._randomIndex() : 0;
             this._loadCurrentTrack();
           }
         },
@@ -947,6 +1006,11 @@
       return this;
     }
     next() {
+      if (this.shuffle && this.queue.length > 1) {
+        this.currentIndex = this._randomIndex();
+        this._loadCurrentTrack();
+        return this;
+      }
       if (this.currentIndex < this.queue.length - 1) {
         this.currentIndex++;
         this._loadCurrentTrack();
@@ -1615,6 +1679,45 @@
       this.repeatBtnEl.innerHTML = icons[this.repeat];
       this.repeatBtnEl.title = labels[this.repeat];
       this.repeatBtnEl.classList.toggle("wb-repeat-active", this.repeat !== "off");
+    }
+    /**
+     * Toggle shuffle (random queue advance) on / off.
+     * @returns {WaveformBar}
+     */
+    toggleShuffle() {
+      return this.setShuffle(!this.shuffle);
+    }
+    /**
+     * Set shuffle on / off directly.
+     * @param {boolean} on
+     * @returns {WaveformBar}
+     */
+    setShuffle(on) {
+      this.shuffle = !!on;
+      this._updateShuffleButton();
+      this._emit("shufflechange", { shuffle: this.shuffle });
+      if (this.config.onShuffleChange) this.config.onShuffleChange(this.shuffle);
+      return this;
+    }
+    /** @private */
+    _updateShuffleButton() {
+      if (!this.shuffleBtnEl) return;
+      this.shuffleBtnEl.title = this.shuffle ? "Shuffle: On" : "Shuffle: Off";
+      this.shuffleBtnEl.setAttribute("aria-pressed", this.shuffle ? "true" : "false");
+      this.shuffleBtnEl.classList.toggle("wb-shuffle-active", this.shuffle);
+    }
+    /**
+     * Pick a random queue index other than the current one (for shuffle).
+     * @returns {number}
+     * @private
+     */
+    _randomIndex() {
+      if (this.queue.length <= 1) return this.currentIndex;
+      let i = this.currentIndex;
+      while (i === this.currentIndex) {
+        i = Math.floor(Math.random() * this.queue.length);
+      }
+      return i;
     }
     /**
      * DJ mode: check if playback has crossed a marker boundary

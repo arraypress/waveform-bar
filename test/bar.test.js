@@ -337,3 +337,156 @@ describe('layout modes: position / classic / collapse', () => {
 		expect(bar.barEl.querySelector('.wb-collapse')).toBeTruthy();
 	});
 });
+
+describe('layout: "center" (3-column Spotify-style)', () => {
+	it('default layout keeps the transport in the left zone, no center class', () => {
+		const bar = makeBar({ persist: false });
+		expect(bar.barEl.classList.contains('wb-layout-center')).toBe(false);
+		expect(bar.barEl.querySelector('.wb-left .wb-controls .wb-play')).toBeTruthy();
+		expect(bar.barEl.querySelector('.wb-centre .wb-time')).toBeTruthy();
+	});
+
+	it('adds wb-layout-center and moves the transport into the centre column', () => {
+		const bar = makeBar({ persist: false, layout: 'center' });
+		expect(bar.barEl.classList.contains('wb-layout-center')).toBe(true);
+		// Transport now lives in the centre column...
+		expect(bar.barEl.querySelector('.wb-centre .wb-controls .wb-play')).toBeTruthy();
+		expect(bar.barEl.querySelector('.wb-left .wb-controls')).toBe(null);
+		// ...above a seek row with the time labels flanking the waveform.
+		const seek = bar.barEl.querySelector('.wb-centre .wb-seek');
+		expect(seek).toBeTruthy();
+		expect(seek.querySelector('.wb-time-current')).toBeTruthy();
+		expect(seek.querySelector('.wb-waveform-container')).toBeTruthy();
+		expect(seek.querySelector('.wb-time-total')).toBeTruthy();
+		// Now-playing stays on the left.
+		expect(bar.barEl.querySelector('.wb-left .wb-track')).toBeTruthy();
+	});
+
+	it('preserves all control classes so the existing wiring still binds', () => {
+		const bar = makeBar({ persist: false, layout: 'center' });
+		for (const sel of ['.wb-play', '.wb-prev', '.wb-next', '.wb-repeat', '.wb-queue-btn', '.wb-mute', '.wb-waveform-container', '.wb-time-current', '.wb-time-total']) {
+			expect(bar.barEl.querySelector(sel)).toBeTruthy();
+		}
+		// Clicking play still resolves a bound handler (proves class-based wiring).
+		expect(() => bar.barEl.querySelector('.wb-play').click()).not.toThrow();
+	});
+
+	it('coerces an unknown layout value to default', () => {
+		const bar = makeBar({ persist: false, layout: 'bogus' });
+		expect(bar.config.layout).toBe('default');
+		expect(bar.barEl.classList.contains('wb-layout-center')).toBe(false);
+	});
+
+	it('mode:"classic" centres the layout AND uses the seekbar', () => {
+		const bar = makeBar({ persist: false, mode: 'classic' });
+		expect(bar.config.mode).toBe('classic');
+		expect(bar.config.layout).toBe('center');
+		expect(bar.barEl.classList.contains('wb-layout-center')).toBe(true);
+		expect(MockPlayer.last.options.waveformStyle).toBe('seekbar');
+	});
+
+	it('mode:"waveform" (default) keeps the default layout + waveform', () => {
+		const bar = makeBar({ persist: false });
+		expect(bar.config.mode).toBe('waveform');
+		expect(bar.barEl.classList.contains('wb-layout-center')).toBe(false);
+		expect(MockPlayer.last.options.waveformStyle).toBe('mirror');
+	});
+
+	it('legacy waveform:false infers classic mode', () => {
+		const bar = makeBar({ persist: false, waveform: false });
+		expect(bar.config.mode).toBe('classic');
+		expect(bar.barEl.classList.contains('wb-layout-center')).toBe(true);
+		expect(MockPlayer.last.options.waveformStyle).toBe('seekbar');
+	});
+
+	it('keeps the collapse button a direct .wb-inner child in center layout', () => {
+		// In center mode .wb-inner is a grid; the collapse button must stay a
+		// direct child (its own 4th `auto` track) rather than nest in a zone,
+		// so it never spills into an implicit second row.
+		const bar = makeBar({ persist: false, layout: 'center', collapsible: true });
+		const inner = bar.barEl.querySelector('.wb-inner');
+		const collapse = bar.barEl.querySelector('.wb-collapse');
+		expect(collapse).toBeTruthy();
+		expect(collapse.parentElement).toBe(inner);
+		expect(bar.barEl.classList.contains('wb-layout-center')).toBe(true);
+	});
+});
+
+describe('shuffle (showShuffle / shuffle)', () => {
+	it('shows no shuffle button unless showShuffle:true', () => {
+		const bar = makeBar({ persist: false });
+		expect(bar.barEl.querySelector('.wb-shuffle')).toBe(null);
+	});
+
+	it('renders a shuffle button in the transport when showShuffle:true', () => {
+		const bar = makeBar({ persist: false, showShuffle: true });
+		expect(bar.barEl.querySelector('.wb-controls .wb-shuffle')).toBeTruthy();
+	});
+
+	it('toggles shuffle state + class + emits shufflechange on click', () => {
+		const bar = makeBar({ persist: false, showShuffle: true });
+		const btn = bar.barEl.querySelector('.wb-shuffle');
+		let last = null;
+		const onChange = (e) => { last = e.detail.shuffle; };
+		document.addEventListener('waveformbar:shufflechange', onChange);
+
+		btn.click();
+		expect(bar.shuffle).toBe(true);
+		expect(btn.classList.contains('wb-shuffle-active')).toBe(true);
+		expect(btn.getAttribute('aria-pressed')).toBe('true');
+		expect(last).toBe(true);
+
+		btn.click();
+		expect(bar.shuffle).toBe(false);
+		expect(btn.classList.contains('wb-shuffle-active')).toBe(false);
+		expect(last).toBe(false);
+
+		document.removeEventListener('waveformbar:shufflechange', onChange);
+	});
+
+	it('seeds shuffle state from config.shuffle', () => {
+		const bar = makeBar({ persist: false, showShuffle: true, shuffle: true });
+		expect(bar.shuffle).toBe(true);
+		expect(bar.barEl.querySelector('.wb-shuffle').classList.contains('wb-shuffle-active')).toBe(true);
+	});
+
+	it('honors config.shuffle even when showShuffle is false (no button)', () => {
+		const bar = makeBar({ persist: false, shuffle: true, showShuffle: false });
+		expect(bar.barEl.querySelector('.wb-shuffle')).toBe(null); // no toggle rendered
+		expect(bar.shuffle).toBe(true); // ...but random advance is still active
+	});
+
+	it('_randomIndex returns an in-range index other than the current', () => {
+		const bar = makeBar({ persist: false });
+		bar.queue = [{ url: 'a' }, { url: 'b' }, { url: 'c' }];
+		bar.currentIndex = 1;
+		for (let n = 0; n < 25; n++) {
+			const i = bar._randomIndex();
+			expect(i).toBeGreaterThanOrEqual(0);
+			expect(i).toBeLessThan(3);
+			expect(i).not.toBe(1);
+		}
+	});
+
+	it('next() jumps to a random track when shuffle is on', () => {
+		const bar = makeBar({ persist: false });
+		bar.queue = [{ url: 'a' }, { url: 'b' }, { url: 'c' }];
+		bar.currentIndex = 0;
+		bar.shuffle = true;
+		bar._loadCurrentTrack = vi.fn(); // isolate the advance logic
+		const rnd = vi.spyOn(Math, 'random').mockReturnValue(0.9); // floor(0.9*3) = 2
+		bar.next();
+		expect(bar.currentIndex).toBe(2);
+		expect(bar._loadCurrentTrack).toHaveBeenCalledTimes(1);
+		rnd.mockRestore();
+	});
+
+	it('next() stays sequential when shuffle is off', () => {
+		const bar = makeBar({ persist: false });
+		bar.queue = [{ url: 'a' }, { url: 'b' }, { url: 'c' }];
+		bar.currentIndex = 0;
+		bar._loadCurrentTrack = vi.fn();
+		bar.next();
+		expect(bar.currentIndex).toBe(1);
+	});
+});

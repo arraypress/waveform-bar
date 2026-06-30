@@ -117,6 +117,124 @@
 }
 
 /* ==========================================================================
+   Centered layout (config.layout: 'center')
+   Spotify-style 3 columns: now-playing (left) | transport above a seek row
+   (centre) | secondary controls (right). Same elements / class names as the
+   default layout — only the grid placement differs.
+   ========================================================================== */
+
+.waveform-bar.wb-layout-center .wb-inner {
+    display: grid;
+    /* Full-width: the centred layout spans the whole viewport — now-playing
+       flush to the left edge, secondary controls flush right — regardless of
+       the `wide` / `maxWidth` cap (which only applies to the default layout). */
+    max-width: none;
+    /* Side columns share the slack symmetrically (minmax(0,1fr) so neither
+       refuses to shrink and pushes the centre off-true-centre). The trailing
+       `auto` track holds the optional collapse button on row 1 — without it,
+       collapsible:true would spill the 4th child into an implicit 2nd row. */
+    grid-template-columns: minmax(0, 1fr) minmax(0, 640px) minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 1rem;
+}
+
+.waveform-bar.wb-layout-center .wb-left {
+    min-width: 0;
+    justify-self: start;
+}
+
+.waveform-bar.wb-layout-center .wb-right {
+    min-width: 0;
+    justify-self: end;
+}
+
+/* Centre column = transport row stacked above the seek row. */
+.waveform-bar.wb-layout-center .wb-centre {
+    flex-direction: column;
+    align-items: center;
+    gap: 0.3rem;
+    min-width: 0;
+}
+
+.waveform-bar.wb-layout-center .wb-controls {
+    justify-content: center;
+}
+
+.waveform-bar.wb-layout-center .wb-seek {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    width: 100%;
+    /* Slim visual row; the seek host (20px) overflows it a touch to keep a
+       comfortable drag hit-area. */
+    height: 1rem;
+}
+
+/* Volume: a persistent horizontal slider on the far right (not the hover
+   vertical popup) — Spotify-style. The mute button + slider sit inline. */
+.waveform-bar.wb-layout-center .wb-volume {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+.waveform-bar.wb-layout-center .wb-volume-popup {
+    position: static;
+    transform: none;
+    width: auto;
+    height: auto;
+    background: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+}
+.waveform-bar.wb-layout-center .wb-volume-popup .wb-volume-slider {
+    transform: none;
+    width: 90px;
+    height: 6px;
+}
+
+.waveform-bar.wb-layout-center .wb-time-current,
+.waveform-bar.wb-layout-center .wb-time-total {
+    flex-shrink: 0;
+    font-size: 0.6875rem;
+    color: var(--wb-text-muted);
+    font-variant-numeric: tabular-nums;
+    min-width: 34px;
+}
+
+.waveform-bar.wb-layout-center .wb-time-current { text-align: right; }
+.waveform-bar.wb-layout-center .wb-time-total { text-align: left; }
+
+/* Collapsed pill in centre layout: revert to flex and keep just the
+   transport visible (the seek row + side columns are hidden). */
+.waveform-bar.wb-layout-center.wb-collapsed .wb-inner { display: flex; }
+.waveform-bar.wb-layout-center.wb-collapsed .wb-left { display: none; }
+.waveform-bar.wb-layout-center.wb-collapsed .wb-centre { display: flex; flex-direction: row; }
+.waveform-bar.wb-layout-center.wb-collapsed .wb-seek { display: none; }
+
+/* Narrow screens: collapse the 3-column grid to a centred stack. `order`
+   still applies to grid items, so neutralise the default layout's flex
+   `order` overrides from the shared 768px breakpoint below. */
+@media (max-width: 768px) {
+    .waveform-bar.wb-layout-center .wb-inner {
+        grid-template-columns: 1fr;
+        gap: 0.4rem;
+    }
+    .waveform-bar.wb-layout-center .wb-left,
+    .waveform-bar.wb-layout-center .wb-centre,
+    .waveform-bar.wb-layout-center .wb-right {
+        order: 0;
+        justify-self: center;
+        min-width: 0;
+    }
+}
+
+/* ==========================================================================
    Controls
    ========================================================================== */
 
@@ -273,38 +391,37 @@
    Waveform
    ========================================================================== */
 
-.wb-waveform-container {
+/* The embedded player OVERWRITES its host element's class to
+   `waveform-player` on mount, so `.wb-waveform-container ...` selectors are
+   dead after init. Target it via the stable `.wb-centre` ancestor instead
+   (matches both the default and centre layouts). Make it fill its flex row
+   and strip its standalone cosmetics (padding/background/border) so it blends
+   into the bar at the intended slim height. */
+.wb-centre .waveform-player {
     flex: 1;
     min-width: 0;
-    width: 100%;
-}
-
-/* Strip waveform-player cosmetics when inside the bar and ensure
-   width propagates through the full DOM chain. The player's own
-   elements are block divs that don't inherit flex sizing. */
-.wb-waveform-container .waveform-player {
     width: 100%;
     background: transparent !important;
     border: none !important;
 }
 
-.wb-waveform-container .waveform-player-inner {
+.wb-centre .waveform-player-inner {
     width: 100%;
     padding: 0 !important;
 }
 
-.wb-waveform-container .waveform-body {
+.wb-centre .waveform-body {
     width: 100%;
     gap: 0 !important;
 }
 
-.wb-waveform-container .waveform-track {
+.wb-centre .waveform-track {
     width: 100%;
     padding: 0 !important;
 }
 
 /* Active marker pulse */
-.wb-waveform-container .waveform-marker.wb-marker-active {
+.wb-centre .waveform-marker.wb-marker-active {
     animation: wb-marker-pulse 2s ease-in-out infinite;
 }
 
@@ -513,6 +630,20 @@
 }
 
 .wb-repeat.wb-repeat-active:hover {
+    background: color-mix(in srgb, var(--wb-accent) 12%, transparent);
+}
+
+.wb-shuffle {
+    opacity: 0.4;
+    transition: opacity 0.15s, color 0.15s;
+}
+
+.wb-shuffle.wb-shuffle-active {
+    opacity: 1;
+    color: var(--wb-accent);
+}
+
+.wb-shuffle.wb-shuffle-active:hover {
     background: color-mix(in srgb, var(--wb-accent) 12%, transparent);
 }
 
@@ -1013,6 +1144,7 @@
 .waveform-bar.wb-collapsed .wb-centre,
 .waveform-bar.wb-collapsed .wb-right,
 .waveform-bar.wb-collapsed .wb-track,
-.waveform-bar.wb-collapsed .wb-repeat {
+.waveform-bar.wb-collapsed .wb-repeat,
+.waveform-bar.wb-collapsed .wb-shuffle {
     display: none;
 }

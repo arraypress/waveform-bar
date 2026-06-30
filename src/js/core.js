@@ -25,7 +25,9 @@ const DEFAULTS = {
     autoResume: true,
     continuous: true,
     repeat: 'off',          // 'off', 'all', 'one'
+    shuffle: false,         // true = random queue advance (next / auto-advance pick a random track)
     showRepeat: true,
+    showShuffle: false,     // show a shuffle toggle button in the transport cluster
     showQueue: true,
     showPrevNext: true,
     showVolume: true,
@@ -36,11 +38,14 @@ const DEFAULTS = {
     maxMeta: 3,
     defaultArtwork: null,   // URL to fallback artwork image
     theme: null,            // 'dark', 'light', or null (dark by default)
-    wide: false,            // true = content spans full width (lifts the 1400px cap)
-    maxWidth: null,         // custom content max-width (CSS value), e.g. '1200px'; overrides `wide`
+    wide: false,            // two sizes — false = default (1400px cap), true = full width. Applies to waveform mode only.
     position: 'bottom',     // 'bottom' (default) or 'top' — which edge the bar docks to
     collapsible: false,     // show a collapse button that shrinks the bar to a floating transport pill
-    waveform: true,         // false = classic Spotify-style seek bar instead of the waveform
+    // mode: 'waveform' (default layout + waveform, width-adjustable) | 'classic'
+    // (Spotify-style centre layout + seekbar, full-width). NOT defaulted here —
+    // its default is inferred from `waveform`/`layout` in init() so the legacy
+    // options still work; see the derivation there.
+    waveform: true,         // internal seek style; classic mode forces seekbar
     errorText: null,        // custom "audio failed to load" message (null = player default)
     share: false,           // show a "copy share link" button (emits ?<shareParam>=<seconds>)
     shareParam: 'wt',       // URL query param for the shared timestamp (seconds)
@@ -59,6 +64,7 @@ const DEFAULTS = {
     onTrackChange: null,
     onQueueChange: null,
     onVolumeChange: null,
+    onShuffleChange: null,
     onFavorite: null,
     onCart: null
 };
@@ -82,6 +88,7 @@ export class WaveformBar {
         this._activeMarkers = null;
         this._currentMarkerIndex = -1;
         this.repeat = 'off'; // 'off', 'all', 'one'
+        this.shuffle = false;
 
         // Load-race guard: bumped before every track load so async
         // continuations (loadTrack().then / restore-seek timeout) can detect
@@ -102,6 +109,7 @@ export class WaveformBar {
         this.metaEl = null;
         this.playBtnEl = null;
         this.repeatBtnEl = null;
+        this.shuffleBtnEl = null;
         this.queueBtnEl = null;
         this.queueBodyEl = null;
         this.queueCountEl = null;
@@ -131,6 +139,19 @@ export class WaveformBar {
         // value can't mute the player or throw downstream.
         const v = Number(this.config.volume);
         this.volume = Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 1;
+
+        // Mode is the canonical switch: 'waveform' (default layout + waveform
+        // viz) or 'classic' (Spotify-style centre layout + seekbar). It's
+        // inferred from the legacy `waveform`/`layout` options when not given,
+        // and in turn SETS them, so the rest of the code keeps reading
+        // config.layout / config.waveform unchanged.
+        let mode = this.config.mode;
+        if (mode !== 'classic' && mode !== 'waveform') {
+            mode = (this.config.layout === 'center' || this.config.waveform === false) ? 'classic' : 'waveform';
+        }
+        this.config.mode = mode;
+        this.config.layout = mode === 'classic' ? 'center' : 'default';
+        this.config.waveform = mode !== 'classic';
 
         // Shareable timestamp: parse the share link's `?<shareParam>=<seconds>`
         // (time) plus the track identity (`?wid` = id, `?wu` = url fallback,
@@ -267,6 +288,7 @@ export class WaveformBar {
         this.metaEl = null;
         this.playBtnEl = null;
         this.repeatBtnEl = null;
+        this.shuffleBtnEl = null;
         this.waveformContainer = null;
         this.queueBodyEl = null;
         this.queueCountEl = null;
@@ -301,13 +323,17 @@ export class WaveformBar {
         if (theme === 'light') this.barEl.classList.add('wb-light');
         this._resolvedTheme = theme;
 
-        // Layout width: `maxWidth` wins; else `wide` lifts the cap to full width.
-        // Default (neither set) leaves the stylesheet's 1400px cap in place.
-        const maxWidth = this.config.maxWidth || (this.config.wide ? '100%' : null);
-        if (maxWidth) this.barEl.style.setProperty('--wb-max-width', maxWidth);
+        // Width: two sizes — default (the stylesheet's 1400px cap) or `wide`
+        // (full width). Waveform mode only; classic is always full-width.
+        if (this.config.mode === 'waveform' && this.config.wide) {
+            this.barEl.style.setProperty('--wb-max-width', '100%');
+        }
 
         // Dock to the top edge instead of the bottom (flips slide direction).
         if (this.config.position === 'top') this.barEl.classList.add('wb-top');
+
+        // Centered 3-column layout (transport centred above the seek row).
+        if (this.config.layout === 'center') this.barEl.classList.add('wb-layout-center');
 
         this.barEl.id = 'waveform-bar';
         this.barEl.innerHTML = buildBarHTML(this.config);
@@ -349,6 +375,15 @@ export class WaveformBar {
             this.repeat = this.config.repeat || 'off';
             this._updateRepeatButton();
             this.repeatBtnEl.addEventListener('click', () => this.cycleRepeat());
+        }
+
+        // Seed shuffle from config regardless of whether the toggle button is
+        // shown, so `{ shuffle: true, showShuffle: false }` still randomises advance.
+        this.shuffle = !!this.config.shuffle;
+        this.shuffleBtnEl = this.barEl.querySelector('.wb-shuffle');
+        if (this.shuffleBtnEl) {
+            this._updateShuffleButton();
+            this.shuffleBtnEl.addEventListener('click', () => this.toggleShuffle());
         }
 
         if (this.queueBtnEl) this.queueBtnEl.addEventListener('click', () => this.toggleQueuePanel());
@@ -437,11 +472,19 @@ export class WaveformBar {
             // a simple rounded progress bar (no waveform), with the player's
             // native click-to-seek. No custom seek-bar DOM needed.
             waveformStyle: this.config.waveform === false ? 'seekbar' : this.config.waveformStyle,
-            height: this.config.waveformHeight,
+            // Slim host for the classic seekbar so it doesn't inflate the bar.
+            // 20px gives a comfortable drag hit-area; the visual `.wb-seek` row
+            // is held to ~16px and the host overflows it a touch. The waveform
+            // keeps its configured height.
+            height: this.config.waveform === false ? 20 : this.config.waveformHeight,
             barWidth: this.config.barWidth,
             barSpacing: this.config.barSpacing,
             errorText: this.config.errorText,   // null -> player uses its own default
             singlePlay: false,
+            // Time tooltip + draggable seek handle (the compact-transport seek
+            // affordances) — on for the bar, off by default for standalone players.
+            showHoverTime: true,
+            seekHandle: true,
             onPlay: () => {
                 this.isPlaying = true;
                 this._updatePlayButton();
@@ -481,13 +524,20 @@ export class WaveformBar {
                     return;
                 }
 
+                if (this.shuffle && this.config.continuous && this.queue.length > 1) {
+                    // Shuffle: jump to a random track in the queue.
+                    this.currentIndex = this._randomIndex();
+                    this._loadCurrentTrack();
+                    return;
+                }
+
                 if (this.config.continuous && this.currentIndex < this.queue.length - 1) {
                     // Next track
                     this.currentIndex++;
                     this._loadCurrentTrack();
                 } else if (this.repeat === 'all' && this.queue.length > 0) {
-                    // Loop back to start
-                    this.currentIndex = 0;
+                    // Loop back to start (or a random track when shuffling).
+                    this.currentIndex = this.shuffle && this.queue.length > 1 ? this._randomIndex() : 0;
                     this._loadCurrentTrack();
                 }
             },
@@ -504,8 +554,9 @@ export class WaveformBar {
                 const track = this.getCurrentTrack();
                 this._emit('error', {track});
 
-                // Auto-advance like onEnd (but never wrap via repeat-all —
-                // that risks an infinite loop if the first track is also dead).
+                // Error recovery: advance strictly sequentially, regardless of
+                // shuffle, and never wrap via repeat-all — a random/looping pick
+                // among dead tracks risks re-selecting broken entries forever.
                 if (this.config.continuous && this.currentIndex < this.queue.length - 1) {
                     this.currentIndex++;
                     this._loadCurrentTrack();
@@ -832,6 +883,11 @@ export class WaveformBar {
     }
 
     next() {
+        if (this.shuffle && this.queue.length > 1) {
+            this.currentIndex = this._randomIndex();
+            this._loadCurrentTrack();
+            return this;
+        }
         if (this.currentIndex < this.queue.length - 1) {
             this.currentIndex++;
             this._loadCurrentTrack();
@@ -1614,6 +1670,49 @@ export class WaveformBar {
         this.repeatBtnEl.innerHTML = icons[this.repeat];
         this.repeatBtnEl.title = labels[this.repeat];
         this.repeatBtnEl.classList.toggle('wb-repeat-active', this.repeat !== 'off');
+    }
+
+    /**
+     * Toggle shuffle (random queue advance) on / off.
+     * @returns {WaveformBar}
+     */
+    toggleShuffle() {
+        return this.setShuffle(!this.shuffle);
+    }
+
+    /**
+     * Set shuffle on / off directly.
+     * @param {boolean} on
+     * @returns {WaveformBar}
+     */
+    setShuffle(on) {
+        this.shuffle = !!on;
+        this._updateShuffleButton();
+        this._emit('shufflechange', {shuffle: this.shuffle});
+        if (this.config.onShuffleChange) this.config.onShuffleChange(this.shuffle);
+        return this;
+    }
+
+    /** @private */
+    _updateShuffleButton() {
+        if (!this.shuffleBtnEl) return;
+        this.shuffleBtnEl.title = this.shuffle ? 'Shuffle: On' : 'Shuffle: Off';
+        this.shuffleBtnEl.setAttribute('aria-pressed', this.shuffle ? 'true' : 'false');
+        this.shuffleBtnEl.classList.toggle('wb-shuffle-active', this.shuffle);
+    }
+
+    /**
+     * Pick a random queue index other than the current one (for shuffle).
+     * @returns {number}
+     * @private
+     */
+    _randomIndex() {
+        if (this.queue.length <= 1) return this.currentIndex;
+        let i = this.currentIndex;
+        while (i === this.currentIndex) {
+            i = Math.floor(Math.random() * this.queue.length);
+        }
+        return i;
     }
 
     /**
