@@ -280,6 +280,10 @@ export class WaveformBar {
             this._observer.disconnect();
             this._observer = null;
         }
+        if (this._barHeightObserver) {
+            this._barHeightObserver.disconnect();
+            this._barHeightObserver = null;
+        }
         if (this._beforeUnloadHandler) {
             window.removeEventListener('beforeunload', this._beforeUnloadHandler);
             this._beforeUnloadHandler = null;
@@ -453,6 +457,18 @@ export class WaveformBar {
         this.queueEl = createQueuePanel();
         if (this._resolvedTheme === 'light') this.queueEl.classList.add('wb-light');
         document.body.appendChild(this.queueEl);
+
+        // Publish the bar's height as --wb-height on the queue so it can sit
+        // flush on top of the bar (a full-width sheet on mobile). Re-measured on
+        // any bar resize — layout change, artwork size, window resize.
+        if (typeof ResizeObserver !== 'undefined' && this.barEl) {
+            const syncBarHeight = () => {
+                if (this.queueEl && this.barEl) this.queueEl.style.setProperty('--wb-height', this.barEl.offsetHeight + 'px');
+            };
+            syncBarHeight();
+            this._barHeightObserver = new ResizeObserver(syncBarHeight);
+            this._barHeightObserver.observe(this.barEl);
+        }
 
         this.queueBodyEl = this.queueEl.querySelector('.wb-queue-body');
         this.queueCountEl = this.queueEl.querySelector('.wb-queue-count');

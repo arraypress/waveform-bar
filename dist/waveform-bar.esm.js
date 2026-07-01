@@ -556,6 +556,10 @@ var WaveformBar = class {
       this._observer.disconnect();
       this._observer = null;
     }
+    if (this._barHeightObserver) {
+      this._barHeightObserver.disconnect();
+      this._barHeightObserver = null;
+    }
     if (this._beforeUnloadHandler) {
       window.removeEventListener("beforeunload", this._beforeUnloadHandler);
       this._beforeUnloadHandler = null;
@@ -684,6 +688,14 @@ var WaveformBar = class {
     this.queueEl = createQueuePanel();
     if (this._resolvedTheme === "light") this.queueEl.classList.add("wb-light");
     document.body.appendChild(this.queueEl);
+    if (typeof ResizeObserver !== "undefined" && this.barEl) {
+      const syncBarHeight = () => {
+        if (this.queueEl && this.barEl) this.queueEl.style.setProperty("--wb-height", this.barEl.offsetHeight + "px");
+      };
+      syncBarHeight();
+      this._barHeightObserver = new ResizeObserver(syncBarHeight);
+      this._barHeightObserver.observe(this.barEl);
+    }
     this.queueBodyEl = this.queueEl.querySelector(".wb-queue-body");
     this.queueCountEl = this.queueEl.querySelector(".wb-queue-count");
     this.queueEl.querySelector(".wb-queue-clear").addEventListener("click", () => this.clearQueue());

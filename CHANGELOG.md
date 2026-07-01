@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.9.1] — 2026-07-02
+
+### Changed
+
+- **Mobile classic (Spotify) layout.** On phones the classic bar now lays out as
+  a single row — artwork + title/artist left, transport centred, secondary
+  controls right — with the seek bar as a full-width draggable strip below. The
+  64px now-playing artwork applies at all widths; the volume slider and BPM badge
+  are hidden on the classic mobile row so it does not crowd.
+- **Queue as a native mobile sheet.** The queue panel is now full-width,
+  edge-to-edge and fused to the top of the bar. The bar publishes its height as a
+  `--wb-height` CSS variable (via `ResizeObserver`) so the sheet sits flush
+  regardless of layout or artwork height.
+
+## [1.9.0] — 2026-07-01
+
 ### Added
 
 - **Lock-screen skip-track buttons.** Wires the embedded player's `onNextTrack`
