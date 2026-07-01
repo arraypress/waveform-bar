@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- **Classic (Spotify-style) mode.** `mode: 'waveform' | 'classic'` — `'classic'`
+  lays the bar out in three columns: now-playing on the left, transport centred
+  over a full-width seek bar, secondary controls on the right. `'waveform'`
+  (default) keeps the existing full-width waveform layout.
+- **Shuffle.** `showShuffle` adds a shuffle toggle to the transport and
+  `shuffle` sets its initial state (random queue advance on next / auto-advance).
+
+### Changed
+
+- **Simplified layout config to two modes.** `mode` supersedes the old
+  `layout` / `waveform` combination; `wide` gives waveform mode a full-width size.
+- **Queue + collapse accessibility.** The queue button now exposes
+  `aria-haspopup` / `aria-expanded` (open/closed state is announced) and closes
+  on `Escape`, returning focus to the trigger; the collapse button keeps its
+  `aria-expanded` in sync.
+
+### Removed
+
+- **`maxWidth`** config option — superseded by `mode` / `wide` sizing.
+
 ## [1.6.4] - 2026-06-30
 
 ### Fixed

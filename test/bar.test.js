@@ -490,3 +490,27 @@ describe('shuffle (showShuffle / shuffle)', () => {
 		expect(bar.currentIndex).toBe(1);
 	});
 });
+
+describe('queue panel accessibility', () => {
+	it('exposes aria-haspopup and syncs aria-expanded on open/close', () => {
+		const bar = makeBar({ persist: false, showQueue: true });
+		const btn = document.querySelector('.wb-queue-btn');
+		expect(btn.getAttribute('aria-haspopup')).toBe('true');
+		expect(btn.getAttribute('aria-expanded')).toBe('false');
+
+		bar.openQueuePanel();
+		expect(btn.getAttribute('aria-expanded')).toBe('true');
+
+		bar.closeQueuePanel();
+		expect(btn.getAttribute('aria-expanded')).toBe('false');
+	});
+
+	it('closes the queue panel on Escape', () => {
+		const bar = makeBar({ persist: false, showQueue: true });
+		bar.openQueuePanel();
+		expect(bar.queueOpen).toBe(true);
+
+		document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+		expect(bar.queueOpen).toBe(false);
+	});
+});

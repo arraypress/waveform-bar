@@ -227,12 +227,12 @@ function buildRightControls(config) {
     s += `<button class="wb-btn wb-btn-sm wb-share" aria-label="Share" title="Copy share link">${ICONS.share}</button>`;
   }
   if (config.showQueue) {
-    s += `<button class="wb-btn wb-btn-sm wb-queue-btn" aria-label="Queue" title="Queue">${ICONS.queue}</button>`;
+    s += `<button class="wb-btn wb-btn-sm wb-queue-btn" aria-label="Queue" title="Queue" aria-haspopup="true" aria-expanded="false">${ICONS.queue}</button>`;
   }
   return s;
 }
 function buildCollapse(config) {
-  return config.collapsible ? `<button class="wb-btn wb-btn-sm wb-collapse" aria-label="Collapse" title="Collapse">${ICONS.collapse}</button>` : "";
+  return config.collapsible ? `<button class="wb-btn wb-btn-sm wb-collapse" aria-label="Collapse" title="Collapse" aria-expanded="true">${ICONS.collapse}</button>` : "";
 }
 function buildBarHTML(config) {
   const controls = buildControls(config);
@@ -516,6 +516,10 @@ var WaveformBar = class {
       document.removeEventListener("click", this._docClickQueue);
       this._docClickQueue = null;
     }
+    if (this._docKeydownQueue) {
+      document.removeEventListener("keydown", this._docKeydownQueue);
+      this._docKeydownQueue = null;
+    }
     if (this._docClickTriggers) {
       document.removeEventListener("click", this._docClickTriggers);
       this._docClickTriggers = null;
@@ -688,6 +692,13 @@ var WaveformBar = class {
       }
     };
     document.addEventListener("click", this._docClickQueue);
+    this._docKeydownQueue = (e) => {
+      if (e.key === "Escape" && this.queueOpen) {
+        this.closeQueuePanel();
+        this.queueBtnEl?.focus();
+      }
+    };
+    document.addEventListener("keydown", this._docKeydownQueue);
   }
   _initPlayer() {
     const opts = {
@@ -1263,7 +1274,10 @@ var WaveformBar = class {
       this.queueEl.style.right = window.innerWidth - rect.right + "px";
     }
     this.queueEl.classList.add("wb-queue-open");
-    if (this.queueBtnEl) this.queueBtnEl.classList.add("wb-active");
+    if (this.queueBtnEl) {
+      this.queueBtnEl.classList.add("wb-active");
+      this.queueBtnEl.setAttribute("aria-expanded", "true");
+    }
     this._renderQueue();
     return this;
   }
@@ -1271,7 +1285,10 @@ var WaveformBar = class {
     if (!this.queueEl) return this;
     this.queueOpen = false;
     this.queueEl.classList.remove("wb-queue-open");
-    if (this.queueBtnEl) this.queueBtnEl.classList.remove("wb-active");
+    if (this.queueBtnEl) {
+      this.queueBtnEl.classList.remove("wb-active");
+      this.queueBtnEl.setAttribute("aria-expanded", "false");
+    }
     return this;
   }
   toggleVolumePopup() {
@@ -1518,6 +1535,7 @@ var WaveformBar = class {
     const label = this.isCollapsed ? "Expand" : "Collapse";
     this.collapseBtnEl.setAttribute("aria-label", label);
     this.collapseBtnEl.setAttribute("title", label);
+    this.collapseBtnEl.setAttribute("aria-expanded", this.isCollapsed ? "false" : "true");
   }
   /** Persist the collapsed state (session-scoped) when persistence is on. @private */
   _saveCollapsed() {

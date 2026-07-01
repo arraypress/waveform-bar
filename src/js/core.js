@@ -232,6 +232,10 @@ export class WaveformBar {
             document.removeEventListener('click', this._docClickQueue);
             this._docClickQueue = null;
         }
+        if (this._docKeydownQueue) {
+            document.removeEventListener('keydown', this._docKeydownQueue);
+            this._docKeydownQueue = null;
+        }
         // Single delegated trigger listener (replaces per-element binding).
         if (this._docClickTriggers) {
             document.removeEventListener('click', this._docClickTriggers);
@@ -462,6 +466,15 @@ export class WaveformBar {
             }
         };
         document.addEventListener('click', this._docClickQueue);
+
+        // Escape closes the queue panel and returns focus to its trigger.
+        this._docKeydownQueue = (e) => {
+            if (e.key === 'Escape' && this.queueOpen) {
+                this.closeQueuePanel();
+                this.queueBtnEl?.focus();
+            }
+        };
+        document.addEventListener('keydown', this._docKeydownQueue);
     }
 
     _initPlayer() {
@@ -1182,7 +1195,10 @@ export class WaveformBar {
         }
 
         this.queueEl.classList.add('wb-queue-open');
-        if (this.queueBtnEl) this.queueBtnEl.classList.add('wb-active');
+        if (this.queueBtnEl) {
+            this.queueBtnEl.classList.add('wb-active');
+            this.queueBtnEl.setAttribute('aria-expanded', 'true');
+        }
         this._renderQueue();
         return this;
     }
@@ -1191,7 +1207,10 @@ export class WaveformBar {
         if (!this.queueEl) return this;
         this.queueOpen = false;
         this.queueEl.classList.remove('wb-queue-open');
-        if (this.queueBtnEl) this.queueBtnEl.classList.remove('wb-active');
+        if (this.queueBtnEl) {
+            this.queueBtnEl.classList.remove('wb-active');
+            this.queueBtnEl.setAttribute('aria-expanded', 'false');
+        }
         return this;
     }
 
@@ -1469,6 +1488,7 @@ export class WaveformBar {
         const label = this.isCollapsed ? 'Expand' : 'Collapse';
         this.collapseBtnEl.setAttribute('aria-label', label);
         this.collapseBtnEl.setAttribute('title', label);
+        this.collapseBtnEl.setAttribute('aria-expanded', this.isCollapsed ? 'false' : 'true');
     }
 
     /** Persist the collapsed state (session-scoped) when persistence is on. @private */

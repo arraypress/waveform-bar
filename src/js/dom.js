@@ -84,7 +84,7 @@ function buildRightControls(config) {
     }
 
     if (config.showQueue) {
-        s += `<button class="wb-btn wb-btn-sm wb-queue-btn" aria-label="Queue" title="Queue">${ICONS.queue}</button>`;
+        s += `<button class="wb-btn wb-btn-sm wb-queue-btn" aria-label="Queue" title="Queue" aria-haspopup="true" aria-expanded="false">${ICONS.queue}</button>`;
     }
 
     return s;
@@ -97,7 +97,7 @@ function buildRightControls(config) {
  */
 function buildCollapse(config) {
     return config.collapsible
-        ? `<button class="wb-btn wb-btn-sm wb-collapse" aria-label="Collapse" title="Collapse">${ICONS.collapse}</button>`
+        ? `<button class="wb-btn wb-btn-sm wb-collapse" aria-label="Collapse" title="Collapse" aria-expanded="true">${ICONS.collapse}</button>`
         : '';
 }
 
