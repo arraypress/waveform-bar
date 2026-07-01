@@ -250,7 +250,7 @@ The active marker on the waveform gently pulses to indicate the current section.
 | `data-url`          | Audio file URL (required)                                                 |
 | `data-id`           | Unique track identifier (defaults to URL)                                 |
 | `data-title`        | Track title                                                               |
-| `data-artist`       | Artist or subtitle                                                        |
+| `data-artist`       | Artist name                                                               |
 | `data-artwork`      | Album artwork URL                                                         |
 | `data-album`        | Album name (for Media Session API)                                        |
 | `data-link`         | URL to navigate when clicking track info in the bar                       |
