@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- **Gradient direction passthrough.** Forwards the player's `waveformGradient`
+  (`'vertical' | 'horizontal' | 'diagonal'`) to the embedded player, so a
+  gradient `waveformColor` / `progressColor` can sweep across the bar's waveform.
+
 ## [1.7.0] — 2026-07-01
 
 ### Added

@@ -385,6 +385,7 @@ var DEFAULTS = {
   // 2px gap between 2px bars — crisp, separated bars (0 = solid "blob")
   waveformColor: null,
   progressColor: null,
+  waveformGradient: "vertical",
   markerColor: "rgba(255, 255, 255, 0.25)",
   volume: 1,
   storageKey: "waveform-bar",
@@ -802,6 +803,7 @@ var WaveformBar = class {
     };
     if (this.config.waveformColor) opts.waveformColor = this.config.waveformColor;
     if (this.config.progressColor) opts.progressColor = this.config.progressColor;
+    if (this.config.waveformGradient) opts.waveformGradient = this.config.waveformGradient;
     this.player = new window.WaveformPlayer(this.waveformContainer, opts);
     this.player.setVolume(this.volume);
   }
