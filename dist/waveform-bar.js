@@ -805,6 +805,8 @@
       if (this.config.waveformColor) opts.waveformColor = this.config.waveformColor;
       if (this.config.progressColor) opts.progressColor = this.config.progressColor;
       if (this.config.waveformGradient) opts.waveformGradient = this.config.waveformGradient;
+      opts.onNextTrack = () => this.next();
+      opts.onPreviousTrack = () => this.previous();
       this.player = new window.WaveformPlayer(this.waveformContainer, opts);
       this.player.setVolume(this.volume);
     }

@@ -611,6 +611,10 @@ export class WaveformBar {
         if (this.config.progressColor) opts.progressColor = this.config.progressColor;
         if (this.config.waveformGradient) opts.waveformGradient = this.config.waveformGradient;
 
+        // Lock-screen / Media Session skip-track buttons drive the bar's queue.
+        opts.onNextTrack = () => this.next();
+        opts.onPreviousTrack = () => this.previous();
+
         this.player = new window.WaveformPlayer(this.waveformContainer, opts);
         this.player.setVolume(this.volume);
     }

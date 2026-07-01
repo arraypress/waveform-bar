@@ -6,6 +6,14 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Lock-screen skip-track buttons.** Wires the embedded player's `onNextTrack`
+  / `onPreviousTrack` to the bar's queue, so the OS Media Session next/previous
+  controls advance the queue. (Needs `@arraypress/waveform-player` >= 1.19.)
+
+## [1.8.0] — 2026-07-01
+
+### Added
+
 - **Gradient direction passthrough.** Forwards the player's `waveformGradient`
   (`'vertical' | 'horizontal' | 'diagonal'`) to the embedded player, so a
   gradient `waveformColor` / `progressColor` can sweep across the bar's waveform.
