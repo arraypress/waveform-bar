@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.10.0] — 2026-07-05
+
+### Added
+
+- **Forward the core player's localizable UI strings.** `seekValueText`,
+  `playPauseLabel`, `speedLabel`, `artworkAlt`, and `unknownTrackText` are now
+  accepted in the bar config and passed through to the embedded player (each
+  defaults to `null` → the player's own default). Only `seekValueText` (the
+  bar's visible seek slider) and `unknownTrackText` (the embedded self-mode
+  player's Media Session title fallback) have a visible effect — the bar hides
+  the player's own controls/info — but the rest are forwarded for completeness.
+  Requires `@arraypress/waveform-player@^1.20.0` for the new options.
+
 ## [1.9.1] — 2026-07-02
 
 ### Changed
