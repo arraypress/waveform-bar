@@ -47,6 +47,16 @@ const DEFAULTS = {
     // options still work; see the derivation there.
     waveform: true,         // internal seek style; classic mode forces seekbar
     errorText: null,        // custom "audio failed to load" message (null = player default)
+    // Localizable UI strings forwarded to the embedded player (null = player
+    // default). seekValueText templates the seek slider's spoken aria-valuetext
+    // (%1$s current, %2$s total); unknownTrackText is its Media Session title
+    // fallback. playPauseLabel/speedLabel/artworkAlt are accepted for
+    // completeness but govern player controls/info the bar hides.
+    seekValueText: null,
+    playPauseLabel: null,
+    speedLabel: null,
+    artworkAlt: null,
+    unknownTrackText: null,
     share: false,           // show a "copy share link" button (emits ?<shareParam>=<seconds>)
     shareParam: 'wt',       // URL query param for the shared timestamp (seconds)
     waveformStyle: 'mirror',
@@ -510,6 +520,17 @@ export class WaveformBar {
             barWidth: this.config.barWidth,
             barSpacing: this.config.barSpacing,
             errorText: this.config.errorText,   // null -> player uses its own default
+            // Localizable UI strings — forwarded verbatim (null -> player default).
+            // Only seekValueText (the bar's visible seek slider) and
+            // unknownTrackText (the embedded self-mode player's Media Session
+            // title fallback) have an effect here; the bar hides the player's
+            // own controls/info, so playPauseLabel/speedLabel/artworkAlt are
+            // passed through for completeness but govern hidden UI.
+            seekValueText: this.config.seekValueText,
+            playPauseLabel: this.config.playPauseLabel,
+            speedLabel: this.config.speedLabel,
+            artworkAlt: this.config.artworkAlt,
+            unknownTrackText: this.config.unknownTrackText,
             singlePlay: false,
             // Time tooltip + draggable seek handle (the compact-transport seek
             // affordances) — on for the bar, off by default for standalone players.
