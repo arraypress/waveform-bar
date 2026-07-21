@@ -375,6 +375,8 @@
     // internal seek style; classic mode forces seekbar
     errorText: null,
     // custom "audio failed to load" message (null = player default)
+    crossOrigin: null,
+    // CORS mode for the embedded <audio> ('anonymous' | 'use-credentials' | null). null = don't set it (native <audio> behavior; avoids breaking CDN media without CORS headers). Forwarded to the player. See waveform-player issue #18.
     // Localizable UI strings forwarded to the embedded player (null = player
     // default). seekValueText templates the seek slider's spoken aria-valuetext
     // (%1$s current, %2$s total); unknownTrackText is its Media Session title
@@ -838,6 +840,7 @@
       if (this.config.waveformColor) opts.waveformColor = this.config.waveformColor;
       if (this.config.progressColor) opts.progressColor = this.config.progressColor;
       if (this.config.waveformGradient) opts.waveformGradient = this.config.waveformGradient;
+      if (this.config.crossOrigin) opts.crossOrigin = this.config.crossOrigin;
       opts.onNextTrack = () => this.next();
       opts.onPreviousTrack = () => this.previous();
       this.player = new window.WaveformPlayer(this.waveformContainer, opts);
