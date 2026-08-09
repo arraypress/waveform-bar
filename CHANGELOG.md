@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.11.2] — 2026-08-09
+
+### Fixed
+
+- **`formatTime()` put `'Infinity:NaN'` in the bar's time display** for a
+  streamed or unseekable source, which reports `audio.duration === Infinity` —
+  truthy and not `NaN`, so it passed both guards, and `Infinity % 60` is `NaN`.
+  Non-finite, non-numeric and negative input now renders `'0:00'`. Same class of
+  bug as the core player's `formatTime`, fixed there in 1.24.2.
+
 ## [1.11.1] — 2026-08-09
 
 ### Fixed
