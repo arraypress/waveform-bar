@@ -4,6 +4,29 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.11.1] — 2026-08-09
+
+### Fixed
+
+- **Bar theme auto-detection had its own copy of the core player's
+  transparent-background bug.** On any page that doesn't paint `<body>`, the
+  computed background is `rgba(0, 0, 0, 0)`; the bar scored that as pure black
+  and pinned itself to the dark theme on white pages. Same root cause as
+  [waveform-player#21](https://github.com/arraypress/waveform-player/issues/21).
+
+### Changed
+
+- Detection now delegates to `WaveformPlayer.utils.detectColorScheme` when the
+  installed core player provides it (1.24.1+), so the bar and the inline players
+  can't disagree about the page theme. The local implementation stays as a
+  fallback for older player builds — the peer range is unchanged — and has been
+  fixed to match: it composites `<body>` and `<html>` backgrounds over the
+  browser canvas and reads that canvas from the page's resolved text colour,
+  falling back to `prefers-color-scheme` only when no text colour resolves.
+- Detection deliberately starts at `<body>`, never at the bar element: the bar
+  paints its own `--wb-bg`, so walking from itself would just read back the
+  theme it already had.
+
 ## [1.11.0] — 2026-07-22
 
 ### Added
