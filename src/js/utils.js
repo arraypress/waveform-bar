@@ -52,14 +52,24 @@ export function isSafeHref(url) {
 }
 
 /**
- * Format seconds to M:SS
+ * Format seconds to M:SS.
+ *
+ * Falsy, non-numeric, non-finite and negative inputs all render as `'0:00'`.
+ * `Infinity` is the one that bites: a streamed or unseekable source reports
+ * `audio.duration === Infinity`, which is truthy and not `NaN`, and
+ * `Infinity % 60` is `NaN` — so the old guard put a literal `'Infinity:NaN'`
+ * in the bar's time display.
+ *
+ * Note this stays M:SS past an hour (a 65-minute track reads `65:00`), unlike
+ * the core player's `formatTime`, which rolls over to H:MM:SS.
  * @param {number} seconds
  * @returns {string}
  */
 export function formatTime(seconds) {
-    if (!seconds || isNaN(seconds)) return '0:00';
-    const m = Math.floor(seconds / 60);
-    const s = Math.floor(seconds % 60);
+    const total = Number(seconds);
+    if (!total || !Number.isFinite(total) || total < 0) return '0:00';
+    const m = Math.floor(total / 60);
+    const s = Math.floor(total % 60);
     return `${m}:${s.toString().padStart(2, '0')}`;
 }
 

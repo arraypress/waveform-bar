@@ -1,5 +1,25 @@
 import { describe, it, expect } from 'vitest';
-import { isSafeHref, parseTrackFromElement } from '../src/js/utils.js';
+import { isSafeHref, parseTrackFromElement, formatTime } from '../src/js/utils.js';
+
+describe('formatTime', () => {
+	it('formats M:SS, staying in minutes past an hour', () => {
+		expect(formatTime(0)).toBe('0:00');
+		expect(formatTime(125)).toBe('2:05');
+		expect(formatTime(3905)).toBe('65:05');
+	});
+
+	// A streamed / unseekable source reports `duration === Infinity`, which is
+	// truthy and not NaN — so it slipped both guards and put a literal
+	// 'Infinity:NaN' in the bar's time display.
+	it('renders a non-finite duration as zero rather than "Infinity:NaN"', () => {
+		expect(formatTime(Infinity)).toBe('0:00');
+		expect(formatTime(-Infinity)).toBe('0:00');
+		expect(formatTime(NaN)).toBe('0:00');
+		expect(formatTime(-30)).toBe('0:00');
+		expect(formatTime(undefined)).toBe('0:00');
+		expect(formatTime('nonsense')).toBe('0:00');
+	});
+});
 
 describe('isSafeHref', () => {
 	it('allows http/https/relative, rejects script-bearing schemes', () => {
