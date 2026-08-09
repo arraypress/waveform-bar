@@ -53,6 +53,89 @@ afterEach(() => {
 	localStorage.clear();
 });
 
+/**
+ * Theme auto-detection, i.e. issue #21 as it applied to the bar — which shipped
+ * its own copy of the player's heuristic and so its own copy of the bug: it read
+ * `<body>`'s computed background, got `rgba(0, 0, 0, 0)` on any page that never
+ * paints one, scored that as pure black and pinned the bar to dark on white
+ * pages. MockPlayer exposes no `utils`, so these exercise the local fallback
+ * unless a test installs the shared detector.
+ */
+describe('theme detection', () => {
+	afterEach(() => {
+		document.documentElement.removeAttribute('data-theme');
+		document.documentElement.className = '';
+		document.documentElement.style.cssText = '';
+		document.body.className = '';
+		document.body.style.cssText = '';
+	});
+
+	it('reads an unpainted page as light, not dark', () => {
+		const bar = makeBar();
+		expect(bar._resolvedTheme).toBe('light');
+		expect(bar.barEl.classList.contains('wb-light')).toBe(true);
+	});
+
+	it('honours a painted body or html background', () => {
+		document.body.style.background = '#111';
+		expect(makeBar()._detectTheme()).toBe('dark');
+
+		document.body.style.background = '';
+		document.documentElement.style.background = '#0a0a0a';
+		expect(makeBar()._detectTheme()).toBe('dark');
+	});
+
+	it('reads light body text as a dark canvas', () => {
+		document.body.style.color = 'rgb(255, 255, 255)';
+		expect(makeBar()._detectTheme()).toBe('dark');
+	});
+
+	it('never detects against the bar\'s own background', () => {
+		// The bar paints `--wb-bg` on itself, so walking the backdrop from
+		// `barEl` would just read back the theme it already has and latch dark
+		// forever. Detection must start at <body>.
+		const bar = makeBar();
+		bar.barEl.style.background = '#000';
+		expect(bar._detectTheme()).toBe('light');
+	});
+
+	it('still lets explicit hints and config.theme win', () => {
+		document.documentElement.setAttribute('data-theme', 'dark');
+		expect(makeBar()._detectTheme()).toBe('dark');
+
+		document.documentElement.removeAttribute('data-theme');
+		const bar = makeBar({ persist: false, theme: 'dark' });
+		expect(bar._resolvedTheme).toBe('dark');
+		expect(bar.barEl.classList.contains('wb-light')).toBe(false);
+	});
+
+	it('delegates to the core player\'s shared detector when it is available', () => {
+		const spy = vi.fn(() => 'dark');
+		window.WaveformPlayer.utils = { detectColorScheme: spy };
+
+		try {
+			expect(makeBar()._detectTheme()).toBe('dark');
+			expect(spy).toHaveBeenCalled();
+			// Never the bar element — that would be circular.
+			expect(spy.mock.calls[0][0]).toBe(document.body);
+		} finally {
+			delete window.WaveformPlayer.utils;
+		}
+	});
+
+	it('falls back to its own detection if the shared detector throws', () => {
+		window.WaveformPlayer.utils = {
+			detectColorScheme: () => { throw new Error('boom'); },
+		};
+
+		try {
+			expect(makeBar()._detectTheme()).toBe('light');
+		} finally {
+			delete window.WaveformPlayer.utils;
+		}
+	});
+});
+
 describe('delegated trigger binding', () => {
 	it('plays on a delegated click and survives destroy()+init() without double-firing', () => {
 		document.body.innerHTML = '<button data-wb-play data-wb-url="a.mp3" data-wb-title="A">Play</button>';

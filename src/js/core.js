@@ -1860,11 +1860,38 @@ export class WaveformBar {
 
     /**
      * Auto-detect light/dark theme from the page.
-     * Checks: 1) HTML/body classes, 2) background brightness, 3) system preference
+     *
+     * Delegates to the core player's shared detector when it's available, so
+     * the bar and the inline players can never disagree about the page theme —
+     * they used to carry separate copies of this heuristic and drifted. The
+     * local fallback below only runs against player builds older than 1.24.1,
+     * which don't expose `utils.detectColorScheme`; it can go once the peer
+     * range moves past that.
+     *
      * @private
      * @returns {'dark'|'light'}
      */
     _detectTheme() {
+        // Detect against <body>, never against `this.barEl`: the bar paints its
+        // own `--wb-bg`, so starting the backdrop walk there would just read
+        // back the theme it already has. The bar is position:fixed over the
+        // page anyway, so what's behind it IS the page canvas.
+        const shared = typeof window !== 'undefined' && window.WaveformPlayer?.utils?.detectColorScheme;
+        if (typeof shared === 'function') {
+            try {
+                return shared(document.body);
+            } catch (e) { /* fall through to the local copy */ }
+        }
+        return this._detectThemeFallback();
+    }
+
+    /**
+     * Theme detection for older `@arraypress/waveform-player` builds.
+     * Mirrors that package's `detectColorScheme` — keep the two in step.
+     * @private
+     * @returns {'dark'|'light'}
+     */
+    _detectThemeFallback() {
         const root = document.documentElement;
         const body = document.body;
 
@@ -1882,22 +1909,50 @@ export class WaveformBar {
         }
         if (root.getAttribute('data-theme') === 'light' || body.getAttribute('data-theme') === 'light') return 'light';
 
-        // 2. Background brightness
+        // 2. The backdrop actually visible behind the bar: <body> and <html>,
+        //    alpha-composited over the UA canvas. Reading <body>'s background
+        //    as a colour on its own was the bug — it computes to
+        //    `rgba(0, 0, 0, 0)` on any page that doesn't paint it, which scored
+        //    as pure black and pinned the bar to dark on white pages.
         try {
-            const bg = getComputedStyle(body).backgroundColor;
-            const rgb = bg.match(/\d+/g);
-            if (rgb && rgb.length >= 3) {
-                const brightness = (rgb[0] * 299 + rgb[1] * 587 + rgb[2] * 114) / 1000;
-                if (brightness > 128) return 'light';
-                if (brightness < 128) return 'dark';
+            let sum = 0;
+            let alpha = 0;
+
+            for (let node = body; node && node.nodeType === 1 && alpha < 0.995; node = node.parentElement) {
+                const c = getComputedStyle(node).backgroundColor.match(/rgba?\(\s*([\d.]+)\s*[,\s]\s*([\d.]+)\s*[,\s]\s*([\d.]+)\s*(?:[,/]\s*([\d.]+))?/i);
+                if (!c) continue;
+                const a = c[4] === undefined ? 1 : Number(c[4]);
+                if (!(a > 0)) continue;
+
+                const weight = a * (1 - alpha);
+                sum += ((c[1] * 299 + c[2] * 587 + c[3] * 114) / 1000) * weight;
+                alpha += weight;
             }
+
+            const brightness = sum + this._detectCanvasBrightness() * (1 - alpha);
+            if (brightness > 128) return 'light';
+            if (brightness < 128) return 'dark';
         } catch (e) {
         }
 
-        // 3. System preference
-        if (window.matchMedia?.('(prefers-color-scheme: light)').matches) return 'light';
-
         return 'dark';
+    }
+
+    /**
+     * Brightness (0–255) of the canvas behind the page, read from the resolved
+     * text colour: light text means the document's used colour-scheme is dark.
+     * Deliberately not `prefers-color-scheme` — see the core player's
+     * `detectCanvasScheme` for why that signal is engine-specific and unusable
+     * here.
+     * @private
+     * @returns {number}
+     */
+    _detectCanvasBrightness() {
+        const text = getComputedStyle(document.body).color.match(/rgba?\(\s*([\d.]+)\s*[,\s]\s*([\d.]+)\s*[,\s]\s*([\d.]+)/i);
+        if (text) return (text[1] * 299 + text[2] * 587 + text[3] * 114) / 1000 > 128 ? 0 : 255;
+        if (window.matchMedia?.('(prefers-color-scheme: dark)').matches) return 0;
+        if (window.matchMedia?.('(prefers-color-scheme: light)').matches) return 255;
+        return 0;
     }
 
     /**
