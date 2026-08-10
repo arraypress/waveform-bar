@@ -352,6 +352,15 @@
     transform: scale(1.05);
 }
 
+/* Optical centring for the play triangle. Flexbox centres the icon's BOX, but a
+   right-pointing triangle carries its visual weight on the flat left edge, so a
+   box-centred glyph reads as sitting left of the circle's centre. The nudge
+   matches waveform-player's `.waveform-icon-play svg` so the two components look
+   the same side by side. The pause glyph is symmetric and needs none. */
+.wb-icon-play svg {
+    margin-left: 1px;
+}
+
 /* ==========================================================================
    Track Info
    ========================================================================== */

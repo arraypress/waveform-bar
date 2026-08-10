@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.11.3] — 2026-08-11
+
+### Fixed
+
+- **The play triangle is optically centred in the round play button.** Flexbox
+  centres the icon's *box*, but a right-pointing triangle carries its visual
+  weight on the flat left edge, so a box-centred glyph reads as sitting left of
+  the circle's centre. `waveform-player` has corrected this on the identical
+  glyph since forever (`.waveform-icon-play svg`); the bar had no equivalent
+  rule at all, so the two components looked different side by side. Thanks to
+  [@sporteka2](https://github.com/sporteka2) for reporting in
+  [#1](https://github.com/arraypress/waveform-bar/issues/1).
+- **A corrupted or version-skewed persisted queue no longer breaks restore.**
+  `restoreQueueState` accepted anything with a truthy `queue.length` — and
+  `'abc'.length` is 3 — so a stored value of the wrong shape passed the guard and
+  then threw at the first `queue.findIndex()`, leaving the bar half-initialised.
+  The queue is now shape-checked as an array of tracks with URLs, entries that
+  aren't usable are dropped, and a `currentIndex` that doesn't address the
+  restored queue resets to 0 instead of stranding the bar on a track that isn't
+  there. Session storage is only as trustworthy as the last thing that wrote it.
+
 ## [1.11.2] — 2026-08-09
 
 ### Fixed

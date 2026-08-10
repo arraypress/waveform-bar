@@ -103,8 +103,15 @@ function restoreQueueState(key) {
     const raw = sessionStorage.getItem(key);
     if (!raw) return null;
     const d = JSON.parse(raw);
-    if (!d || !d.queue || !d.queue.length) return null;
-    return d;
+    if (!d || typeof d !== "object") return null;
+    const queue = Array.isArray(d.queue) ? d.queue.filter((t) => t && typeof t === "object" && typeof t.url === "string" && t.url) : [];
+    if (!queue.length) return null;
+    const index = Number(d.currentIndex);
+    return {
+      ...d,
+      queue,
+      currentIndex: Number.isInteger(index) && index >= 0 && index < queue.length ? index : 0
+    };
   } catch (e) {
     sessionStorage.removeItem(key);
     return null;
