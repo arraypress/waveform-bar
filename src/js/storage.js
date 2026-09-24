@@ -3,6 +3,8 @@
  * @description Persistence helpers for WaveformBar
  */
 
+import {normalizeTrack} from './utils.js';
+
 /**
  * Save queue state to sessionStorage
  * @param {string} key - Storage key
@@ -21,8 +23,9 @@ export function saveQueueState(key, state) {
  * different bar version's format, a half-written entry, or anything else sharing
  * the key. `d.queue.length` alone passes a plain string (`'abc'.length` is 3),
  * which then throws at the first `queue.findIndex()`, so the queue is
- * shape-checked as an array of tracks with URLs before it's handed back. A
- * restored state that isn't usable is discarded rather than half-applied.
+ * shape-checked as an array of tracks with URLs (each normalized, markers
+ * included) before it's handed back. A restored state that isn't usable is
+ * discarded rather than half-applied.
  *
  * @param {string} key - Storage key
  * @returns {Object|null}
@@ -34,8 +37,11 @@ export function restoreQueueState(key) {
         const d = JSON.parse(raw);
         if (!d || typeof d !== 'object') return null;
 
+        // normalizeTrack drops entries without a url and sanitizes each
+        // track's fields — a corrupt `markers` ('x', [null]) would otherwise
+        // throw in init() on every page load for the rest of the tab session.
         const queue = Array.isArray(d.queue)
-            ? d.queue.filter(t => t && typeof t === 'object' && typeof t.url === 'string' && t.url)
+            ? d.queue.map(t => normalizeTrack(t)).filter(Boolean)
             : [];
         if (!queue.length) return null;
 
@@ -48,7 +54,12 @@ export function restoreQueueState(key) {
             currentIndex: Number.isInteger(index) && index >= 0 && index < queue.length ? index : 0
         };
     } catch (e) {
-        sessionStorage.removeItem(key);
+        // Clear the poisoned key — but storage that threw on read (sandboxed
+        // iframe, blocked site data: SecurityError) throws here too, and an
+        // unguarded removeItem re-threw straight out of init().
+        try {
+            sessionStorage.removeItem(key);
+        } catch (e2) {}
         return null;
     }
 }

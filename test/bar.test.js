@@ -597,3 +597,89 @@ describe('queue panel accessibility', () => {
 		expect(bar.queueOpen).toBe(false);
 	});
 });
+
+describe('persistence hardening', () => {
+	it('init({persist:true}) survives storage that throws on every access', () => {
+		const denied = () => { throw new DOMException('denied', 'SecurityError'); };
+		const blocked = { getItem: denied, setItem: denied, removeItem: denied };
+		vi.stubGlobal('sessionStorage', blocked);
+		vi.stubGlobal('localStorage', blocked);
+		try {
+			expect(() => makeBar({ persist: true })).not.toThrow();
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
+
+	it('init() survives a persisted queue with corrupt markers', () => {
+		sessionStorage.setItem('waveform-bar', JSON.stringify({
+			queue: [{ url: 'a.mp3', markers: 'x' }, { url: 'b.mp3', markers: [null] }],
+			currentIndex: 0,
+		}));
+		expect(() => makeBar({ persist: true })).not.toThrow();
+		sessionStorage.setItem('waveform-bar', JSON.stringify({
+			queue: [{ url: 'b.mp3', markers: [null] }],
+			currentIndex: 0,
+		}));
+		expect(() => makeBar({ persist: true })).not.toThrow();
+	});
+});
+
+describe('resume position', () => {
+	const saved = () => JSON.parse(sessionStorage.getItem('waveform-bar'));
+
+	it('does not carry the previous track\'s position over a track switch', () => {
+		const bar = makeBar({ persist: true });
+		bar.play({ url: 'a.mp3' });
+		bar.player.options.onTimeUpdate(100, 200);
+		expect(saved().position).toBe(100);
+
+		bar.play({ url: 'b.mp3' });
+		expect(saved().position).toBe(0);
+		bar.player.options.onTimeUpdate(5, 200);
+		expect(saved().position).toBe(5);
+	});
+
+	it('saves after a backwards seek', () => {
+		const bar = makeBar({ persist: true });
+		bar.play({ url: 'a.mp3' });
+		bar.player.options.onTimeUpdate(100, 200);
+		bar.player.options.onTimeUpdate(10, 200);
+		expect(saved().position).toBe(10);
+	});
+
+	it('saves the exact position on pagehide and when the page is hidden', () => {
+		const bar = makeBar({ persist: true });
+		bar.play({ url: 'a.mp3' });
+		bar.player.options.onTimeUpdate(50, 200);
+		bar.player.options.onTimeUpdate(51.5, 200);   // inside the 2s throttle
+		expect(saved().position).toBe(50);
+
+		window.dispatchEvent(new Event('pagehide'));
+		expect(saved().position).toBe(51.5);
+
+		bar.player.options.onTimeUpdate(52.5, 200);
+		Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+		try {
+			document.dispatchEvent(new Event('visibilitychange'));
+		} finally {
+			delete document.visibilityState;
+		}
+		expect(saved().position).toBe(52.5);
+	});
+});
+
+describe('persist:false writes nothing to localStorage', () => {
+	it('volume, mute, favourites and seeded favourites stay in memory', () => {
+		document.body.innerHTML = '<button data-wb-play data-wb-url="a.mp3" data-wb-favorited="true">A</button>';
+		const bar = makeBar({ persist: false, actions: { favorite: {} } });
+		bar.setVolume(0.5);
+		bar.toggleMute();
+		bar.play({ url: 'b.mp3' });
+		bar.toggleFavorite();
+
+		expect(localStorage.length).toBe(0);
+		expect(bar.isFavorited('a.mp3')).toBe(true);   // seeded state still applies
+		expect(bar.isFavorited('b.mp3')).toBe(true);
+	});
+});

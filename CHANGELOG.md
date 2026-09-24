@@ -28,6 +28,28 @@ All notable changes to this project will be documented in this file.
   values. Every path that queues a track (`play()`, `addToQueue()`,
   `request-play`, session restore, share links) now goes through one
   `normalizeTrack()`, and merges into an existing entry skip empty values.
+- **`init({ persist: true })` no longer crashes when storage is blocked.**
+  `restoreQueueState`'s catch block cleared the poisoned key with an unguarded
+  `sessionStorage.removeItem()`, which throws the same `SecurityError` as the
+  read did (sandboxed iframes, blocked site data) — straight out of `init()`.
+- **A persisted queue with corrupt `markers` no longer breaks every page of the
+  tab.** Restore only validated `url`, so `markers: "x"` or `[null]` threw in
+  `init()` on each load until the session ended. Restored tracks now go through
+  `normalizeTrack()`, which keeps only marker objects with a finite `time`.
+- **Stale resume position after a track switch or a backwards seek.** The saved
+  position and the periodic-save throttle were never reset when a new track
+  loaded, so the previous track's position was persisted against the new one,
+  and saving stayed quiet until playback climbed past the old last-save time
+  (also after seeking backwards). Both reset on load and the throttle compares
+  the absolute distance. The exact position is now also saved on `pagehide` and
+  when the page becomes hidden — iOS Safari doesn't reliably fire `beforeunload`.
+
+### Changed
+
+- **`persist: false` now writes nothing to `localStorage`.** `setVolume()`,
+  `toggleMute()`, `toggleFavorite()` and the `data-wb-favorited` seeding saved
+  volume/mute/favourites regardless of `persist`, contrary to the docs. In-memory
+  state and events are unchanged; only the storage writes are gated.
 
 ## [1.11.3] — 2026-08-11
 

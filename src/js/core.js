@@ -231,9 +231,17 @@ export class WaveformBar {
 
         this.isInitialized = true;
 
-        // Save exact position when navigating away
+        // Save exact position when navigating away. beforeunload alone isn't
+        // enough: iOS Safari doesn't reliably fire it (and it blocks the
+        // bfcache), so also save on pagehide and whenever the page is hidden
+        // — the last moment a mobile tab is guaranteed to run script.
         this._beforeUnloadHandler = () => this._saveState();
+        this._visibilityHandler = () => {
+            if (document.visibilityState === 'hidden') this._saveState();
+        };
         window.addEventListener('beforeunload', this._beforeUnloadHandler);
+        window.addEventListener('pagehide', this._beforeUnloadHandler);
+        document.addEventListener('visibilitychange', this._visibilityHandler);
 
         return this;
     }
@@ -317,7 +325,12 @@ export class WaveformBar {
         }
         if (this._beforeUnloadHandler) {
             window.removeEventListener('beforeunload', this._beforeUnloadHandler);
+            window.removeEventListener('pagehide', this._beforeUnloadHandler);
             this._beforeUnloadHandler = null;
+        }
+        if (this._visibilityHandler) {
+            document.removeEventListener('visibilitychange', this._visibilityHandler);
+            this._visibilityHandler = null;
         }
 
         // Null cached DOM refs so a stale ref can't be poked after teardown.
@@ -644,8 +657,10 @@ export class WaveformBar {
                 // sync with the bar's audio.
                 this._pumpExternalProgress(currentTime, duration);
 
-                // Save state periodically during playback
-                if (!this._lastSaveTime || currentTime - this._lastSaveTime > 2) {
+                // Save state periodically during playback. Math.abs so a
+                // backwards seek (currentTime now well below the last save)
+                // saves too, instead of waiting to climb past it again.
+                if (!this._lastSaveTime || Math.abs(currentTime - this._lastSaveTime) > 2) {
                     this._lastSaveTime = currentTime;
                     this._saveState();
                 }
@@ -1086,7 +1101,7 @@ export class WaveformBar {
         this.isMuted = this.volume === 0;
         if (this.player) this.player.setVolume(this.volume);
         this._updateVolumeUI();
-        saveVolume(this.config.storageKey, this.volume, this.isMuted, this._volumeBeforeMute);
+        this._persistVolume();
         this._emit('volumechange', {volume: this.volume});
         if (this.config.onVolumeChange) this.config.onVolumeChange(this.volume);
         return this;
@@ -1106,7 +1121,7 @@ export class WaveformBar {
             this._updateVolumeUI();
             // Persist the muted flag — the unmute branch routes through
             // setVolume() (which saves), so mute must save too.
-            saveVolume(this.config.storageKey, this.volume, this.isMuted, this._volumeBeforeMute);
+            this._persistVolume();
         }
         return this;
     }
@@ -1130,7 +1145,7 @@ export class WaveformBar {
 
         this._updateFavoriteUI();
         this._syncFavoriteAttributes(track.url, !wasFav);
-        saveFavorites(this.config.storageKey, this._favorites);
+        if (this.config.persist) saveFavorites(this.config.storageKey, this._favorites);
 
         this._emit('favorite', {track, favorited: !wasFav});
         if (this.config.onFavorite) this.config.onFavorite(track, !wasFav);
@@ -1472,6 +1487,9 @@ export class WaveformBar {
             clearTimeout(this._restoreSeekTimeout);
             this._restoreSeekTimeout = null;
         }
+        // Resume position belongs to the previous track (see _loadCurrentTrack).
+        this._lastPosition = 0;
+        this._lastSaveTime = 0;
 
         this.player.loadTrack(track.url, track.title, track.artist, loadOpts).then(() => {
             if (this._loadSeq !== seq) return;
@@ -1632,6 +1650,13 @@ export class WaveformBar {
             clearTimeout(this._restoreSeekTimeout);
             this._restoreSeekTimeout = null;
         }
+
+        // The resume position belongs to the previous track. Left as-is, the
+        // save below would persist it against the new one, and the throttled
+        // save in onTimeUpdate would stay quiet until the new track climbed
+        // past the old track's last-save time.
+        this._lastPosition = 0;
+        this._lastSaveTime = 0;
 
         // Reset any previously-current external player so its UI flips
         // back to "paused" while the new track loads. The new track's
@@ -2136,7 +2161,7 @@ export class WaveformBar {
         });
 
         // If we seeded from attributes, save to storage so it persists
-        if (seededFav) {
+        if (seededFav && this.config.persist) {
             saveFavorites(this.config.storageKey, this._favorites);
         }
     }
@@ -2271,6 +2296,16 @@ export class WaveformBar {
 
         this._renderQueue();
         this._syncPageState();
+    }
+
+    /**
+     * Save volume + mute state — only when persistence is on. `persist: false`
+     * is documented as "nothing is stored", localStorage included.
+     * @private
+     */
+    _persistVolume() {
+        if (!this.config.persist) return;
+        saveVolume(this.config.storageKey, this.volume, this.isMuted, this._volumeBeforeMute);
     }
 
     _restoreVolume() {

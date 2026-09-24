@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { saveQueueState, restoreQueueState } from '../src/js/storage.js';
 
 /**
@@ -97,5 +97,33 @@ describe('restoreQueueState', () => {
 		const state = restoreQueueState(KEY);
 		expect(state).not.toBe(null);
 		expect(state.queue[0].url).toBe('/a.mp3');
+	});
+});
+
+describe('blocked storage', () => {
+	it('does not re-throw when storage access itself throws (sandboxed iframe)', () => {
+		const denied = () => { throw new DOMException('denied', 'SecurityError'); };
+		vi.stubGlobal('sessionStorage', { getItem: denied, setItem: denied, removeItem: denied });
+		try {
+			expect(() => restoreQueueState(KEY)).not.toThrow();
+			expect(restoreQueueState(KEY)).toBe(null);
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
+});
+
+describe('restoreQueueState markers', () => {
+	it('sanitizes corrupt markers instead of handing them to init()', () => {
+		sessionStorage.setItem(KEY, JSON.stringify({
+			queue: [
+				{ url: '/a.mp3', markers: 'x' },
+				{ url: '/b.mp3', markers: [null, 3, { time: '12', label: 'ok' }, { time: 'nope' }] },
+			],
+			currentIndex: 0,
+		}));
+		const state = restoreQueueState(KEY);
+		expect(state.queue[0].markers).toEqual([]);
+		expect(state.queue[1].markers).toEqual([{ time: 12, label: 'ok' }]);
 	});
 });
