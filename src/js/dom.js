@@ -26,7 +26,7 @@ function buildControls(config) {
         s += `<button class="wb-btn wb-next" aria-label="Next" title="Next">${ICONS.next}</button>`;
     }
     if (config.showRepeat) {
-        s += `<button class="wb-btn wb-btn-sm wb-repeat" aria-label="Repeat" title="Repeat: Off">${ICONS.repeatOff}</button>`;
+        s += `<button class="wb-btn wb-btn-sm wb-repeat" aria-label="Repeat: Off" title="Repeat: Off" aria-pressed="false">${ICONS.repeatOff}</button>`;
     }
     s += '</div>';
     return s;
@@ -60,7 +60,7 @@ function buildRightControls(config) {
     if (config.actions) {
         s += '<div class="wb-actions">';
         if (config.actions.favorite) {
-            s += `<button class="wb-btn wb-btn-sm wb-fav" aria-label="Favorite" title="Favorite">${ICONS.heart}</button>`;
+            s += `<button class="wb-btn wb-btn-sm wb-fav" aria-label="Favorite" title="Favorite" aria-pressed="false">${ICONS.heart}</button>`;
         }
         if (config.actions.cart) {
             s += `<button class="wb-btn wb-btn-sm wb-cart" aria-label="Add to cart" title="Add to Cart">${ICONS.cart}</button>`;

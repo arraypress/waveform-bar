@@ -37,3 +37,14 @@ describe('play button optical centring', () => {
 		expect(CSS).toMatch(/\.wb-btn\s*\{[^}]*justify-content:\s*center/);
 	});
 });
+
+describe('queue keyboard affordances', () => {
+	it('reveals the remove button when the row has keyboard focus, not only on hover', () => {
+		expect(CSS).toMatch(/\.wb-queue-item:focus-within \.wb-queue-remove/);
+	});
+
+	it('resets the skip button so it lays out like the old row text', () => {
+		expect(CSS).toMatch(/\.wb-queue-skip\s*\{[^}]*font:\s*inherit/);
+		expect(CSS).toMatch(/\.wb-queue-skip:focus-visible/);
+	});
+});

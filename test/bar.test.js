@@ -777,3 +777,62 @@ describe('blocked autoplay', () => {
 		expect(bar.isPlaying).toBe(false);
 	});
 });
+
+describe('queue + toggle button accessibility', () => {
+	it('each queue entry has a real <button> to skip to it', () => {
+		const bar = makeBar({ persist: false, showQueue: true });
+		bar.addToQueue({ url: 'a.mp3', title: 'A' });
+		bar.addToQueue({ url: 'b.mp3', title: 'B' });
+		bar.openQueuePanel();
+
+		const skips = bar.queueEl.querySelectorAll('.wb-queue-item .wb-queue-skip');
+		expect(skips.length).toBe(2);
+		skips.forEach((b) => {
+			expect(b.tagName).toBe('BUTTON');
+			expect(b.getAttribute('type')).toBe('button');
+		});
+		// Current entry is marked for assistive tech.
+		expect(bar.queueEl.querySelector('.wb-queue-current').getAttribute('aria-current')).toBe('true');
+
+		const spy = vi.spyOn(bar, 'skipTo');
+		bar.queueEl.querySelector('.wb-queue-item[data-qi="1"] .wb-queue-skip').click();
+		expect(spy).toHaveBeenCalledWith(1);
+		expect(spy).toHaveBeenCalledTimes(1);
+	});
+
+	it('keeps keyboard focus in the queue after skipping from it', () => {
+		const bar = makeBar({ persist: false, showQueue: true });
+		bar.addToQueue({ url: 'a.mp3', title: 'A' });
+		bar.addToQueue({ url: 'b.mp3', title: 'B' });
+		bar.openQueuePanel();
+
+		const skip = bar.queueEl.querySelector('.wb-queue-item[data-qi="1"] .wb-queue-skip');
+		skip.focus();
+		skip.click();   // re-renders the rows
+
+		expect(bar.getCurrentIndex()).toBe(1);
+		expect(document.activeElement).toBe(
+			bar.queueEl.querySelector('.wb-queue-item[data-qi="1"] .wb-queue-skip'));
+	});
+
+	it('repeat button exposes its mode via aria-pressed and its label', () => {
+		const bar = makeBar({ persist: false });
+		const btn = bar.barEl.querySelector('.wb-repeat');
+		expect(btn.getAttribute('aria-pressed')).toBe('false');
+		expect(btn.getAttribute('aria-label')).toBe('Repeat: Off');
+		bar.cycleRepeat();
+		expect(btn.getAttribute('aria-pressed')).toBe('true');
+		expect(btn.getAttribute('aria-label')).toBe('Repeat: All');
+		bar.cycleRepeat();
+		expect(btn.getAttribute('aria-label')).toBe('Repeat: One');
+	});
+
+	it('favourite button exposes its state via aria-pressed', () => {
+		const bar = makeBar({ persist: false, actions: { favorite: {} } });
+		const btn = bar.barEl.querySelector('.wb-fav');
+		bar.play({ url: 'a.mp3' });
+		expect(btn.getAttribute('aria-pressed')).toBe('false');
+		bar.toggleFavorite();
+		expect(btn.getAttribute('aria-pressed')).toBe('true');
+	});
+});

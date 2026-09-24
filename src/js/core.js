@@ -1870,6 +1870,10 @@ export class WaveformBar {
         const labels = {off: 'Repeat: Off', all: 'Repeat: All', one: 'Repeat: One'};
         this.repeatBtnEl.innerHTML = icons[this.repeat];
         this.repeatBtnEl.title = labels[this.repeat];
+        // Three modes don't fit aria-pressed alone: it says on/off, and the
+        // label names which mode.
+        this.repeatBtnEl.setAttribute('aria-label', labels[this.repeat]);
+        this.repeatBtnEl.setAttribute('aria-pressed', this.repeat !== 'off' ? 'true' : 'false');
         this.repeatBtnEl.classList.toggle('wb-repeat-active', this.repeat !== 'off');
     }
 
@@ -2134,6 +2138,8 @@ export class WaveformBar {
         const fav = this.isFavorited();
         this.favBtnEl.innerHTML = fav ? ICONS.heartFilled : ICONS.heart;
         this.favBtnEl.classList.toggle('wb-fav-active', fav);
+        this.favBtnEl.setAttribute('aria-pressed', fav ? 'true' : 'false');
+        this.favBtnEl.title = fav ? 'Favorited' : 'Favorite';
     }
 
     _renderQueue() {

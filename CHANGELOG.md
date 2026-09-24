@@ -61,6 +61,13 @@ All notable changes to this project will be documented in this file.
   showing "playing". The rejection is caught and the paused state restored. A
   rejected `loadTrack()` is no longer surfaced as an unhandled rejection either
   (load failures still arrive through `onError`).
+- **Queue entries are keyboard-operable.** "Skip to" was a click-only `<div>`;
+  each row's number + title/artist is now a real `<button>`, the remove button
+  is revealed on keyboard focus (`:focus-within`), the current row carries
+  `aria-current`, and focus stays in the queue after a keyboard skip.
+- **Repeat and favourite buttons expose their state.** Both now set
+  `aria-pressed`; the repeat button's `aria-label` names the mode
+  (`Repeat: Off/All/One`) since three modes don't fit a pressed/unpressed pair.
 
 ### Changed
 
@@ -68,6 +75,11 @@ All notable changes to this project will be documented in this file.
   `toggleMute()`, `toggleFavorite()` and the `data-wb-favorited` seeding saved
   volume/mute/favourites regardless of `persist`, contrary to the docs. In-memory
   state and events are unchanged; only the storage writes are gated.
+- **Queue row markup.** A row's number and text now sit inside
+  `<button class="wb-queue-skip">`, and `.wb-queue-info`,
+  `.wb-queue-item-title` and `.wb-queue-item-artist` are `<span>`s (block-level
+  via CSS) instead of `<div>`s. Class names are unchanged; custom CSS that
+  selected by element type (`div.wb-queue-item-title`) needs updating.
 
 ## [1.11.3] — 2026-08-11
 

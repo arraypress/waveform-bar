@@ -28,6 +28,33 @@ export function createQueuePanel() {
 }
 
 /**
+ * One queue row. The number + title/artist sit in a real `<button>` so the
+ * row is reachable and operable from the keyboard (it used to be a click-only
+ * `<div>`); the remove button stays a sibling rather than nesting interactive
+ * content inside it. Text uses block `<span>`s — `<div>` isn't allowed in a
+ * button.
+ * @param {Object} t - Track
+ * @param {number} index - Queue index
+ * @param {string} extraClass - Modifier class(es), with leading space
+ * @param {string|number} num - Number column content (index or icon markup)
+ * @param {boolean} removable - Render a remove button
+ * @returns {string}
+ */
+function queueItem(t, index, extraClass, num, removable) {
+    const current = extraClass.includes('wb-queue-current') ? ' aria-current="true"' : '';
+    return `<div class="wb-queue-item${extraClass}" data-qi="${index}"${current}>
+            <button type="button" class="wb-queue-skip">
+                <span class="wb-queue-num">${num}</span>
+                <span class="wb-queue-info">
+                    <span class="wb-queue-item-title">${escapeHtml(t.title)}</span>
+                    <span class="wb-queue-item-artist">${escapeHtml(t.artist)}</span>
+                </span>
+            </button>
+            ${removable ? `<button type="button" class="wb-queue-remove" data-qi="${index}" aria-label="Remove">${ICONS.close}</button>` : ''}
+        </div>`;
+}
+
+/**
  * Render queue panel contents
  * @param {HTMLElement} bodyEl - Queue body element
  * @param {HTMLElement} countEl - Queue count badge element
@@ -46,19 +73,17 @@ export function renderQueue(bodyEl, countEl, queue, currentIndex, callbacks) {
         return;
     }
 
+    // Re-rendering replaces the rows, which would drop keyboard focus to
+    // <body> right after a keyboard skip/remove. Remember the focused row.
+    const active = document.activeElement;
+    const focusedQi = active && bodyEl.contains(active) ? active.closest('[data-qi]')?.dataset.qi : null;
+
     let html = '';
 
     // Now playing
     if (currentIndex >= 0 && currentIndex < queue.length) {
-        const current = queue[currentIndex];
         html += '<div class="wb-queue-label">Now Playing</div>';
-        html += `<div class="wb-queue-item wb-queue-current" data-qi="${currentIndex}">
-            <span class="wb-queue-num">${ICONS.speaker}</span>
-            <div class="wb-queue-info">
-                <div class="wb-queue-item-title">${escapeHtml(current.title)}</div>
-                <div class="wb-queue-item-artist">${escapeHtml(current.artist)}</div>
-            </div>
-        </div>`;
+        html += queueItem(queue[currentIndex], currentIndex, ' wb-queue-current', ICONS.speaker, false);
     }
 
     // Next up
@@ -68,29 +93,14 @@ export function renderQueue(bodyEl, countEl, queue, currentIndex, callbacks) {
             html += '<div class="wb-queue-label">Next Up</div>';
             hasNext = true;
         }
-        const t = queue[i];
-        html += `<div class="wb-queue-item" data-qi="${i}">
-            <span class="wb-queue-num">${i - currentIndex}</span>
-            <div class="wb-queue-info">
-                <div class="wb-queue-item-title">${escapeHtml(t.title)}</div>
-                <div class="wb-queue-item-artist">${escapeHtml(t.artist)}</div>
-            </div>
-            <button class="wb-queue-remove" data-qi="${i}" aria-label="Remove">${ICONS.close}</button>
-        </div>`;
+        html += queueItem(queue[i], i, '', i - currentIndex, true);
     }
 
     // Previously played
     if (currentIndex > 0) {
         html += '<div class="wb-queue-label">Previously Played</div>';
         for (let j = currentIndex - 1; j >= 0; j--) {
-            const t = queue[j];
-            html += `<div class="wb-queue-item wb-queue-played" data-qi="${j}">
-                <span class="wb-queue-num">${j + 1}</span>
-                <div class="wb-queue-info">
-                    <div class="wb-queue-item-title">${escapeHtml(t.title)}</div>
-                    <div class="wb-queue-item-artist">${escapeHtml(t.artist)}</div>
-                </div>
-            </div>`;
+            html += queueItem(queue[j], j, ' wb-queue-played', j + 1, false);
         }
     }
 
@@ -110,4 +120,10 @@ export function renderQueue(bodyEl, countEl, queue, currentIndex, callbacks) {
             if (callbacks.onRemove) callbacks.onRemove(parseInt(btn.dataset.qi));
         });
     });
+
+    if (focusedQi != null) {
+        const target = bodyEl.querySelector(`.wb-queue-item[data-qi="${focusedQi}"] .wb-queue-skip`)
+            || bodyEl.querySelector('.wb-queue-skip');
+        if (target) target.focus();
+    }
 }
