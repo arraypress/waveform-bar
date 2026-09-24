@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.12.1] — 2026-09-24
+
 ### Fixed
 
 - **The play/pause glyph is centred in its circle again.** The icon spans are

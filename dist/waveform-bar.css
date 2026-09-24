@@ -88,7 +88,9 @@
     /* Override via the `wide` / `maxWidth` options (sets --wb-max-width on the bar). */
     max-width: var(--wb-max-width, 1400px);
     margin: 0 auto;
-    padding: 1rem 1.5rem;
+    /* 0.625rem keeps the bar slim (~60px on desktop): the tallest items are
+       the 40px play button and artwork, and the waveform is 32px. */
+    padding: 0.625rem 1.5rem;
     display: flex;
     align-items: center;
     gap: 0.75rem;
@@ -359,6 +361,13 @@
    the same side by side. The pause glyph is symmetric and needs none. */
 .wb-icon-play svg {
     margin-left: 1px;
+}
+
+/* The glyphs sit in spans toggled to `display: block`; an inline svg in there
+   rides the text baseline, and the line box's descender space lifts it ~3px
+   above the circle's centre. Block svgs size the span to the glyph exactly. */
+.wb-play svg {
+    display: block;
 }
 
 /* ==========================================================================
