@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.12.0] — 2026-09-24
+
 ### Added
 
 - **`barRadius` config option** — rounded bar caps in px for the bar's

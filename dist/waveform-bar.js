@@ -51,6 +51,34 @@
     const s = Math.floor(total % 60);
     return `${m}:${s.toString().padStart(2, "0")}`;
   }
+  function sanitizeMarkers(value) {
+    if (!Array.isArray(value)) return [];
+    return value.map((m) => m && typeof m === "object" && !Array.isArray(m) ? { ...m, time: Number(m.time) } : null).filter((m) => m && Number.isFinite(m.time));
+  }
+  var PLAYER_DETAIL_FIELDS = ["url", "title", "artist", "artwork", "markers", "waveform"];
+  function normalizeTrack(input, { fromPlayer = false } = {}) {
+    if (!input || typeof input !== "object" || typeof input.url !== "string" || !input.url) return null;
+    const keys = fromPlayer ? PLAYER_DETAIL_FIELDS : Object.keys(input);
+    const track = {};
+    for (const k of keys) {
+      const v = input[k];
+      if (v == null || k === "player") continue;
+      track[k] = v;
+    }
+    if ("markers" in track) track.markers = sanitizeMarkers(track.markers);
+    if ("waveform" in track && !Array.isArray(track.waveform) && !(typeof track.waveform === "string" && track.waveform)) {
+      delete track.waveform;
+    }
+    return track;
+  }
+  function mergeTrack(base, update) {
+    const merged = { ...base };
+    for (const [k, v] of Object.entries(update || {})) {
+      if (v == null || v === "" || Array.isArray(v) && v.length === 0) continue;
+      merged[k] = v;
+    }
+    return merged;
+  }
   function parseTrackFromElement(el) {
     const url = el.dataset.wbUrl || el.dataset.url;
     if (!url) return null;
@@ -62,11 +90,9 @@
     }
     let markers = [];
     try {
-      const parsed = JSON.parse(el.dataset.wbMarkers || el.dataset.markers || "null");
-      markers = Array.isArray(parsed) ? parsed : [];
+      markers = sanitizeMarkers(JSON.parse(el.dataset.wbMarkers || el.dataset.markers || "null"));
     } catch (e) {
     }
-    markers = markers.map((m) => m && typeof m === "object" ? { ...m, time: Number(m.time) } : null).filter((m) => m && Number.isFinite(m.time));
     let waveform = null;
     try {
       const parsed = JSON.parse(el.dataset.wbWaveform || el.dataset.waveform || "null");
@@ -105,7 +131,7 @@
       if (!raw) return null;
       const d = JSON.parse(raw);
       if (!d || typeof d !== "object") return null;
-      const queue = Array.isArray(d.queue) ? d.queue.filter((t) => t && typeof t === "object" && typeof t.url === "string" && t.url) : [];
+      const queue = Array.isArray(d.queue) ? d.queue.map((t) => normalizeTrack(t)).filter(Boolean) : [];
       if (!queue.length) return null;
       const index = Number(d.currentIndex);
       return {
@@ -114,7 +140,10 @@
         currentIndex: Number.isInteger(index) && index >= 0 && index < queue.length ? index : 0
       };
     } catch (e) {
-      sessionStorage.removeItem(key);
+      try {
+        sessionStorage.removeItem(key);
+      } catch (e2) {
+      }
       return null;
     }
   }
@@ -193,7 +222,7 @@
       s += `<button class="wb-btn wb-next" aria-label="Next" title="Next">${ICONS.next}</button>`;
     }
     if (config.showRepeat) {
-      s += `<button class="wb-btn wb-btn-sm wb-repeat" aria-label="Repeat" title="Repeat: Off">${ICONS.repeatOff}</button>`;
+      s += `<button class="wb-btn wb-btn-sm wb-repeat" aria-label="Repeat: Off" title="Repeat: Off" aria-pressed="false">${ICONS.repeatOff}</button>`;
     }
     s += "</div>";
     return s;
@@ -215,7 +244,7 @@
     if (config.actions) {
       s += '<div class="wb-actions">';
       if (config.actions.favorite) {
-        s += `<button class="wb-btn wb-btn-sm wb-fav" aria-label="Favorite" title="Favorite">${ICONS.heart}</button>`;
+        s += `<button class="wb-btn wb-btn-sm wb-fav" aria-label="Favorite" title="Favorite" aria-pressed="false">${ICONS.heart}</button>`;
       }
       if (config.actions.cart) {
         s += `<button class="wb-btn wb-btn-sm wb-cart" aria-label="Add to cart" title="Add to Cart">${ICONS.cart}</button>`;
@@ -251,14 +280,17 @@
     const collapse = buildCollapse(config);
     if (config.layout === "center") {
       const left2 = `<div class="wb-left">${track}${meta}</div>`;
-      const centre2 = `<div class="wb-centre">${controls}<div class="wb-seek"><span class="wb-time-current">0:00</span><div class="wb-waveform-container"></div><span class="wb-time-total">0:00</span></div></div>`;
+      const cur = config.showTime ? '<span class="wb-time-current">0:00</span>' : "";
+      const total = config.showTime ? '<span class="wb-time-total">0:00</span>' : "";
+      const centre2 = `<div class="wb-centre">${controls}<div class="wb-seek">${cur}<div class="wb-waveform-container"></div>${total}</div></div>`;
       const right2 = `<div class="wb-right">${rightControls}</div>`;
       return `<div class="wb-inner">${left2}${centre2}${right2}${collapse}</div>`;
     }
     const left = `<div class="wb-left">${controls}${track}</div>`;
+    const time = config.showTime ? '<div class="wb-time"><span class="wb-time-current">0:00</span> / <span class="wb-time-total">0:00</span></div>' : "";
     const centre = `<div class="wb-centre">
         <div class="wb-waveform-container"></div>
-        <div class="wb-time"><span class="wb-time-current">0:00</span> / <span class="wb-time-total">0:00</span></div>
+        ${time}
     </div>`;
     const right = `<div class="wb-right">${meta}${rightControls}</div>`;
     return `<div class="wb-inner">${left}${centre}${right}${collapse}</div>`;
@@ -281,6 +313,19 @@
     `;
     return el;
   }
+  function queueItem(t, index, extraClass, num, removable) {
+    const current = extraClass.includes("wb-queue-current") ? ' aria-current="true"' : "";
+    return `<div class="wb-queue-item${extraClass}" data-qi="${index}"${current}>
+            <button type="button" class="wb-queue-skip">
+                <span class="wb-queue-num">${num}</span>
+                <span class="wb-queue-info">
+                    <span class="wb-queue-item-title">${escapeHtml(t.title)}</span>
+                    <span class="wb-queue-item-artist">${escapeHtml(t.artist)}</span>
+                </span>
+            </button>
+            ${removable ? `<button type="button" class="wb-queue-remove" data-qi="${index}" aria-label="Remove">${ICONS.close}</button>` : ""}
+        </div>`;
+  }
   function renderQueue(bodyEl, countEl, queue, currentIndex, callbacks) {
     if (!bodyEl) return;
     const upcoming = Math.max(0, queue.length - 1 - currentIndex);
@@ -289,17 +334,12 @@
       bodyEl.innerHTML = `<div class="wb-queue-empty">${ICONS.queue}<p>Queue is empty</p></div>`;
       return;
     }
+    const active = document.activeElement;
+    const focusedQi = active && bodyEl.contains(active) ? active.closest("[data-qi]")?.dataset.qi : null;
     let html = "";
     if (currentIndex >= 0 && currentIndex < queue.length) {
-      const current = queue[currentIndex];
       html += '<div class="wb-queue-label">Now Playing</div>';
-      html += `<div class="wb-queue-item wb-queue-current" data-qi="${currentIndex}">
-            <span class="wb-queue-num">${ICONS.speaker}</span>
-            <div class="wb-queue-info">
-                <div class="wb-queue-item-title">${escapeHtml(current.title)}</div>
-                <div class="wb-queue-item-artist">${escapeHtml(current.artist)}</div>
-            </div>
-        </div>`;
+      html += queueItem(queue[currentIndex], currentIndex, " wb-queue-current", ICONS.speaker, false);
     }
     let hasNext = false;
     for (let i = currentIndex + 1; i < queue.length; i++) {
@@ -307,27 +347,12 @@
         html += '<div class="wb-queue-label">Next Up</div>';
         hasNext = true;
       }
-      const t = queue[i];
-      html += `<div class="wb-queue-item" data-qi="${i}">
-            <span class="wb-queue-num">${i - currentIndex}</span>
-            <div class="wb-queue-info">
-                <div class="wb-queue-item-title">${escapeHtml(t.title)}</div>
-                <div class="wb-queue-item-artist">${escapeHtml(t.artist)}</div>
-            </div>
-            <button class="wb-queue-remove" data-qi="${i}" aria-label="Remove">${ICONS.close}</button>
-        </div>`;
+      html += queueItem(queue[i], i, "", i - currentIndex, true);
     }
     if (currentIndex > 0) {
       html += '<div class="wb-queue-label">Previously Played</div>';
       for (let j = currentIndex - 1; j >= 0; j--) {
-        const t = queue[j];
-        html += `<div class="wb-queue-item wb-queue-played" data-qi="${j}">
-                <span class="wb-queue-num">${j + 1}</span>
-                <div class="wb-queue-info">
-                    <div class="wb-queue-item-title">${escapeHtml(t.title)}</div>
-                    <div class="wb-queue-item-artist">${escapeHtml(t.artist)}</div>
-                </div>
-            </div>`;
+        html += queueItem(queue[j], j, " wb-queue-played", j + 1, false);
       }
     }
     bodyEl.innerHTML = html;
@@ -343,6 +368,10 @@
         if (callbacks.onRemove) callbacks.onRemove(parseInt(btn.dataset.qi));
       });
     });
+    if (focusedQi != null) {
+      const target = bodyEl.querySelector(`.wb-queue-item[data-qi="${focusedQi}"] .wb-queue-skip`) || bodyEl.querySelector(".wb-queue-skip");
+      if (target) target.focus();
+    }
   }
 
   // src/js/core.js
@@ -404,6 +433,8 @@
     barWidth: 2,
     barSpacing: 2,
     // 2px gap between 2px bars — crisp, separated bars (0 = solid "blob")
+    barRadius: null,
+    // rounded bar caps in px (0 = square). null = player default (waveform-player 1.8.0+)
     waveformColor: null,
     progressColor: null,
     waveformGradient: "vertical",
@@ -420,6 +451,9 @@
     onFavorite: null,
     onCart: null
   };
+  function toTrack(trackOrUrl) {
+    return typeof trackOrUrl === "string" ? normalizeTrack({ url: trackOrUrl, id: trackOrUrl, title: extractTitle(trackOrUrl) }) : normalizeTrack(trackOrUrl);
+  }
   var WaveformBar = class {
     constructor() {
       this.config = null;
@@ -440,6 +474,7 @@
       this._currentMarkerIndex = -1;
       this.repeat = "off";
       this.shuffle = false;
+      this._shufflePlayed = /* @__PURE__ */ new Set();
       this._loadSeq = 0;
       this._restoreSeekTimeout = null;
       this._externalPlayers = /* @__PURE__ */ new Map();
@@ -504,12 +539,17 @@
         this._restoreState();
       }
       if (this._shareTarget && (this._shareTarget.id || this._shareTarget.url)) {
-        const shared = this._resolveSharedTrack(this._shareTarget);
+        const shared = normalizeTrack(this._resolveSharedTrack(this._shareTarget));
         if (shared) this._loadSharedTrack(shared, this._shareTarget.time);
       }
       this.isInitialized = true;
       this._beforeUnloadHandler = () => this._saveState();
+      this._visibilityHandler = () => {
+        if (document.visibilityState === "hidden") this._saveState();
+      };
       window.addEventListener("beforeunload", this._beforeUnloadHandler);
+      window.addEventListener("pagehide", this._beforeUnloadHandler);
+      document.addEventListener("visibilitychange", this._visibilityHandler);
       return this;
     }
     /**
@@ -517,6 +557,7 @@
      * @returns {WaveformBar}
      */
     destroy() {
+      this._pumpExternalPlayState(false);
       if (this.player) {
         this.player.destroy();
         this.player = null;
@@ -577,13 +618,20 @@
         this._observer.disconnect();
         this._observer = null;
       }
+      clearTimeout(this._observeTimeout);
+      this._observeTimeout = null;
       if (this._barHeightObserver) {
         this._barHeightObserver.disconnect();
         this._barHeightObserver = null;
       }
       if (this._beforeUnloadHandler) {
         window.removeEventListener("beforeunload", this._beforeUnloadHandler);
+        window.removeEventListener("pagehide", this._beforeUnloadHandler);
         this._beforeUnloadHandler = null;
+      }
+      if (this._visibilityHandler) {
+        document.removeEventListener("visibilitychange", this._visibilityHandler);
+        this._visibilityHandler = null;
       }
       this.volumePopupEl = null;
       this.queueBtnEl = null;
@@ -607,6 +655,16 @@
       this.currentIndex = -1;
       this.isPlaying = false;
       this.queueOpen = false;
+      this.isCollapsed = false;
+      this.isMuted = false;
+      this._volumeBeforeMute = 1;
+      this._favorites = /* @__PURE__ */ new Set();
+      this._cartItems = /* @__PURE__ */ new Set();
+      this._lastPosition = 0;
+      this._lastSaveTime = 0;
+      this._activeMarkers = null;
+      this._currentMarkerIndex = -1;
+      this._shufflePlayed = /* @__PURE__ */ new Set();
       this.isInitialized = false;
       this.config = null;
       return this;
@@ -652,9 +710,9 @@
       if (prevBtn) prevBtn.addEventListener("click", () => this.previous());
       if (nextBtn) nextBtn.addEventListener("click", () => this.next());
       if (this.shareBtnEl) this.shareBtnEl.addEventListener("click", () => this._share());
+      this.repeat = ["off", "all", "one"].includes(this.config.repeat) ? this.config.repeat : "off";
       this.repeatBtnEl = this.barEl.querySelector(".wb-repeat");
       if (this.repeatBtnEl) {
-        this.repeat = this.config.repeat || "off";
         this._updateRepeatButton();
         this.repeatBtnEl.addEventListener("click", () => this.cycleRepeat());
       }
@@ -795,21 +853,23 @@
           if (this.repeat === "one") {
             if (this.player) {
               this.player.seekTo(0);
-              this.player.play().catch(() => {
-              });
+              this._playSafely();
             }
             return;
           }
           if (this.shuffle && this.config.continuous && this.queue.length > 1) {
-            this.currentIndex = this._randomIndex();
-            this._loadCurrentTrack();
+            const i = this._nextShuffleIndex();
+            if (i >= 0) {
+              this.currentIndex = i;
+              this._loadCurrentTrack();
+            }
             return;
           }
           if (this.config.continuous && this.currentIndex < this.queue.length - 1) {
             this.currentIndex++;
             this._loadCurrentTrack();
           } else if (this.repeat === "all" && this.queue.length > 0) {
-            this.currentIndex = this.shuffle && this.queue.length > 1 ? this._randomIndex() : 0;
+            this.currentIndex = this.shuffle && this.queue.length > 1 ? this._nextShuffleIndex() : 0;
             this._loadCurrentTrack();
           }
         },
@@ -830,7 +890,7 @@
           if (this.timeCurrentEl) this.timeCurrentEl.textContent = formatTime(currentTime);
           if (this.timeTotalEl) this.timeTotalEl.textContent = formatTime(duration);
           this._pumpExternalProgress(currentTime, duration);
-          if (!this._lastSaveTime || currentTime - this._lastSaveTime > 2) {
+          if (!this._lastSaveTime || Math.abs(currentTime - this._lastSaveTime) > 2) {
             this._lastSaveTime = currentTime;
             this._saveState();
           }
@@ -849,6 +909,7 @@
       if (this.config.progressColor) opts.progressColor = this.config.progressColor;
       if (this.config.waveformGradient) opts.waveformGradient = this.config.waveformGradient;
       if (this.config.crossOrigin) opts.crossOrigin = this.config.crossOrigin;
+      if (this.config.barRadius != null) opts.barRadius = this.config.barRadius;
       opts.onNextTrack = () => this.next();
       opts.onPreviousTrack = () => this.previous();
       this.player = new window.WaveformPlayer(this.waveformContainer, opts);
@@ -860,6 +921,7 @@
     _bindTriggers() {
       if (!this._docClickTriggers) {
         this._docClickTriggers = (e) => {
+          if (this._isInsideExternalPlayer(e.target)) return;
           const queueEl = e.target?.closest?.("[data-wb-queue]");
           if (queueEl) {
             e.preventDefault();
@@ -894,10 +956,13 @@
       if (!this._externalListenersBound) {
         this._externalListenersBound = true;
         this._onExtRequestPlay = (e) => {
-          const t = e.detail;
-          if (!t || !t.url) return;
+          let track = normalizeTrack(e.detail, { fromPlayer: true });
+          if (!track) return;
           e.preventDefault();
-          this.play(t);
+          const triggerEl = e.target?.closest?.("[data-wb-play], [data-wb-queue]");
+          const fromTrigger = triggerEl ? parseTrackFromElement(triggerEl) : null;
+          if (fromTrigger && fromTrigger.url === track.url) track = mergeTrack(fromTrigger, track);
+          this.play(track);
         };
         this._onExtRequestPause = (e) => {
           const t = e.detail;
@@ -931,9 +996,13 @@
       this._externalPlayers = /* @__PURE__ */ new Map();
       const WP = window.WaveformPlayer;
       if (!WP || !WP.instances) return;
+      const byContainer = /* @__PURE__ */ new Map();
+      WP.instances.forEach((p) => {
+        if (p && p.container) byContainer.set(p.container, p);
+      });
       const newlyDiscovered = [];
       document.querySelectorAll('[data-waveform-player][data-audio-mode="external"]').forEach((el) => {
-        const inst = WP.instances.get(el.id);
+        const inst = byContainer.get(el);
         if (!inst || !inst.options || !inst.options.url) return;
         const url = inst.options.url;
         if (!this._externalPlayers.has(url)) this._externalPlayers.set(url, /* @__PURE__ */ new Set());
@@ -954,6 +1023,26 @@
           }
         });
       }
+    }
+    /**
+     * Whether a node sits inside the container of an external-mode player the
+     * bar has registered. Only registered players count — a
+     * `[data-waveform-player]` element that never mounted (or runs in self
+     * mode) emits no request-* events, so its trigger clicks must still work.
+     *
+     * @private
+     * @param {EventTarget|null} target
+     * @returns {boolean}
+     */
+    _isInsideExternalPlayer(target) {
+      const el = target?.closest?.("[data-waveform-player]");
+      if (!el || !this._externalPlayers) return false;
+      for (const set of this._externalPlayers.values()) {
+        for (const inst of set) {
+          if (inst.container === el) return true;
+        }
+      }
+      return false;
     }
     /**
      * Push playing-state into every external-mode player whose URL
@@ -1001,11 +1090,28 @@
     }
     _observeDOM() {
       if (typeof MutationObserver === "undefined") return;
-      this._observer = new MutationObserver(() => {
-        this._attachExternalPlayers();
-        this._syncPageState();
+      this._observer = new MutationObserver((mutations) => {
+        if (mutations.every((m) => this._isOwnMutation(m.target))) return;
+        clearTimeout(this._observeTimeout);
+        this._observeTimeout = setTimeout(() => {
+          this._observeTimeout = null;
+          this._attachExternalPlayers();
+          this._syncPageState();
+        }, 50);
       });
       this._observer.observe(document.body, { childList: true, subtree: true });
+    }
+    /**
+     * Whether a mutated node belongs to DOM the bar itself keeps updating: the
+     * bar, its queue panel, or a registered inline player's own markup.
+     * @private
+     * @param {Node} node
+     * @returns {boolean}
+     */
+    _isOwnMutation(node) {
+      if (this.barEl?.contains(node) || this.queueEl?.contains(node)) return true;
+      const el = node.nodeType === 1 ? node : node.parentElement;
+      return !!el && this._isInsideExternalPlayer(el);
     }
     // =====================================================================
     // Playback (public)
@@ -1016,8 +1122,8 @@
      * @returns {WaveformBar}
      */
     play(trackOrUrl) {
-      const track = typeof trackOrUrl === "string" ? { url: trackOrUrl, id: trackOrUrl, title: extractTitle(trackOrUrl) } : trackOrUrl;
-      if (!track || !track.url) return this;
+      const track = toTrack(trackOrUrl);
+      if (!track) return this;
       const current = this.getCurrentTrack();
       if (current && current.url === track.url) {
         this.togglePlay();
@@ -1025,7 +1131,7 @@
       }
       const existing = this.queue.findIndex((t) => t.url === track.url);
       if (existing >= 0) {
-        this.queue[existing] = { ...this.queue[existing], ...track };
+        this.queue[existing] = mergeTrack(this.queue[existing], track);
         this.currentIndex = existing;
       } else {
         const insertAt = this.currentIndex + 1;
@@ -1041,8 +1147,8 @@
      * @returns {WaveformBar}
      */
     addToQueue(trackOrUrl) {
-      const track = typeof trackOrUrl === "string" ? { url: trackOrUrl, id: trackOrUrl, title: extractTitle(trackOrUrl) } : trackOrUrl;
-      if (!track || !track.url) return this;
+      const track = toTrack(trackOrUrl);
+      if (!track) return this;
       if (this.queue.find((t) => t.url === track.url)) return this;
       this.queue.push(track);
       this._renderQueue();
@@ -1052,13 +1158,35 @@
         this.currentIndex = 0;
         this._loadCurrentTrack();
       }
+      this._emit("queuechange", { queue: this.queue, currentIndex: this.currentIndex });
       if (this.config.onQueueChange) this.config.onQueueChange(this.queue, this.currentIndex);
       return this;
     }
     togglePlay() {
       if (!this.player) return this;
-      this.isPlaying ? this.player.pause() : this.player.play();
+      this.isPlaying ? this.player.pause() : this._playSafely();
       return this;
+    }
+    /**
+     * Start the embedded player, absorbing a refused play(). Blocked
+     * autoplay (NotAllowedError) or an unplayable source rejects the promise;
+     * uncaught, that was an unhandled rejection, and if the 'play' event had
+     * already flipped `isPlaying` the bar stayed showing "playing" forever.
+     * @private
+     */
+    _playSafely() {
+      const restore = () => {
+        this.isPlaying = false;
+        this._updatePlayButton();
+        this._syncPageState();
+        this._pumpExternalPlayState(false);
+      };
+      try {
+        const p = this.player && this.player.play();
+        if (p && typeof p.catch === "function") p.catch(restore);
+      } catch (e) {
+        restore();
+      }
     }
     pause() {
       if (this.player && this.isPlaying) this.player.pause();
@@ -1066,8 +1194,11 @@
     }
     next() {
       if (this.shuffle && this.queue.length > 1) {
-        this.currentIndex = this._randomIndex();
-        this._loadCurrentTrack();
+        const i = this._nextShuffleIndex();
+        if (i >= 0) {
+          this.currentIndex = i;
+          this._loadCurrentTrack();
+        }
         return this;
       }
       if (this.currentIndex < this.queue.length - 1) {
@@ -1138,7 +1269,7 @@
       this.isMuted = this.volume === 0;
       if (this.player) this.player.setVolume(this.volume);
       this._updateVolumeUI();
-      saveVolume(this.config.storageKey, this.volume, this.isMuted, this._volumeBeforeMute);
+      this._persistVolume();
       this._emit("volumechange", { volume: this.volume });
       if (this.config.onVolumeChange) this.config.onVolumeChange(this.volume);
       return this;
@@ -1154,7 +1285,7 @@
         this.isMuted = true;
         if (this.player) this.player.setVolume(0);
         this._updateVolumeUI();
-        saveVolume(this.config.storageKey, this.volume, this.isMuted, this._volumeBeforeMute);
+        this._persistVolume();
       }
       return this;
     }
@@ -1173,7 +1304,7 @@
       }
       this._updateFavoriteUI();
       this._syncFavoriteAttributes(track.url, !wasFav);
-      saveFavorites(this.config.storageKey, this._favorites);
+      if (this.config.persist) saveFavorites(this.config.storageKey, this._favorites);
       this._emit("favorite", { track, favorited: !wasFav });
       if (this.config.onFavorite) this.config.onFavorite(track, !wasFav);
       if (this.config.actions?.favorite) {
@@ -1243,6 +1374,7 @@
       const current = this.getCurrentTrack();
       this.queue = current ? [current] : [];
       this.currentIndex = current ? 0 : -1;
+      this._shufflePlayed = new Set(current ? [current.url] : []);
       this._renderQueue();
       this._saveState();
       this._updateNavButtons();
@@ -1440,7 +1572,7 @@
       if (!track || !track.url || !this.player) return;
       const existing = this.queue.findIndex((t) => t.url === track.url);
       if (existing >= 0) {
-        this.queue[existing] = { ...this.queue[existing], ...track };
+        this.queue[existing] = mergeTrack(this.queue[existing], track);
         this.currentIndex = existing;
       } else {
         this.queue.push(track);
@@ -1466,6 +1598,8 @@
         clearTimeout(this._restoreSeekTimeout);
         this._restoreSeekTimeout = null;
       }
+      this._lastPosition = 0;
+      this._lastSaveTime = 0;
       this.player.loadTrack(track.url, track.title, track.artist, loadOpts).then(() => {
         if (this._loadSeq !== seq) return;
         if (this.player) this.player.setVolume(this.isMuted ? 0 : this.volume);
@@ -1611,6 +1745,9 @@
         clearTimeout(this._restoreSeekTimeout);
         this._restoreSeekTimeout = null;
       }
+      this._lastPosition = 0;
+      this._lastSaveTime = 0;
+      this._shufflePlayed.add(track.url);
       this._pumpExternalPlayState(false);
       this.show();
       this._updateTrackDisplay(track);
@@ -1628,7 +1765,9 @@
       } else {
         loadOpts.markers = [];
       }
-      this.player.loadTrack(track.url, track.title, track.artist, loadOpts);
+      const loading = this.player.loadTrack(track.url, track.title, track.artist, loadOpts);
+      if (loading && typeof loading.catch === "function") loading.catch(() => {
+      });
       this._activeMarkers = track.markers && track.markers.length ? track.markers : null;
       this._currentMarkerIndex = -1;
       if (this.player) this.player.setVolume(this.isMuted ? 0 : this.volume);
@@ -1704,7 +1843,8 @@
         if (nextBtn) nextBtn.classList.remove("wb-disabled");
       } else {
         if (prevBtn) prevBtn.classList.toggle("wb-disabled", this.currentIndex <= 0);
-        if (nextBtn) nextBtn.classList.toggle("wb-disabled", this.currentIndex >= this.queue.length - 1);
+        const noNext = this.shuffle ? !this.queue.some((t, i) => i !== this.currentIndex && !this._shufflePlayed.has(t.url)) : this.currentIndex >= this.queue.length - 1;
+        if (nextBtn) nextBtn.classList.toggle("wb-disabled", noNext);
       }
     }
     // =====================================================================
@@ -1744,6 +1884,8 @@
       const labels = { off: "Repeat: Off", all: "Repeat: All", one: "Repeat: One" };
       this.repeatBtnEl.innerHTML = icons[this.repeat];
       this.repeatBtnEl.title = labels[this.repeat];
+      this.repeatBtnEl.setAttribute("aria-label", labels[this.repeat]);
+      this.repeatBtnEl.setAttribute("aria-pressed", this.repeat !== "off" ? "true" : "false");
       this.repeatBtnEl.classList.toggle("wb-repeat-active", this.repeat !== "off");
     }
     /**
@@ -1759,8 +1901,14 @@
      * @returns {WaveformBar}
      */
     setShuffle(on) {
+      const wasOn = this.shuffle;
       this.shuffle = !!on;
+      if (this.shuffle && !wasOn) {
+        const current = this.getCurrentTrack();
+        this._shufflePlayed = new Set(current ? [current.url] : []);
+      }
       this._updateShuffleButton();
+      this._updateNavButtons();
       this._emit("shufflechange", { shuffle: this.shuffle });
       if (this.config.onShuffleChange) this.config.onShuffleChange(this.shuffle);
       return this;
@@ -1773,15 +1921,31 @@
       this.shuffleBtnEl.classList.toggle("wb-shuffle-active", this.shuffle);
     }
     /**
-     * Pick a random queue index other than the current one (for shuffle).
+     * Pick a random queue index that isn't the current track and hasn't been
+     * played in this shuffle pass. -1 when none is left.
      * @returns {number}
      * @private
      */
     _randomIndex() {
-      if (this.queue.length <= 1) return this.currentIndex;
-      let i = this.currentIndex;
-      while (i === this.currentIndex) {
-        i = Math.floor(Math.random() * this.queue.length);
+      const candidates = [];
+      this.queue.forEach((t, i) => {
+        if (i !== this.currentIndex && !this._shufflePlayed.has(t.url)) candidates.push(i);
+      });
+      if (!candidates.length) return -1;
+      return candidates[Math.floor(Math.random() * candidates.length)];
+    }
+    /**
+     * The shuffle advance: a random upcoming track, or — once every track has
+     * played — a fresh pass under repeat 'all', else -1 (stop).
+     * @returns {number}
+     * @private
+     */
+    _nextShuffleIndex() {
+      let i = this._randomIndex();
+      if (i < 0 && this.repeat === "all") {
+        const current = this.getCurrentTrack();
+        this._shufflePlayed = new Set(current ? [current.url] : []);
+        i = this._randomIndex();
       }
       return i;
     }
@@ -1965,6 +2129,8 @@
       const fav = this.isFavorited();
       this.favBtnEl.innerHTML = fav ? ICONS.heartFilled : ICONS.heart;
       this.favBtnEl.classList.toggle("wb-fav-active", fav);
+      this.favBtnEl.setAttribute("aria-pressed", fav ? "true" : "false");
+      this.favBtnEl.title = fav ? "Favorited" : "Favorite";
     }
     _renderQueue() {
       renderQueue(this.queueBodyEl, this.queueCountEl, this.queue, this.currentIndex, {
@@ -2019,7 +2185,7 @@
           seededCart = true;
         }
       });
-      if (seededFav) {
+      if (seededFav && this.config.persist) {
         saveFavorites(this.config.storageKey, this._favorites);
       }
     }
@@ -2129,6 +2295,15 @@
       });
       this._renderQueue();
       this._syncPageState();
+    }
+    /**
+     * Save volume + mute state — only when persistence is on. `persist: false`
+     * is documented as "nothing is stored", localStorage included.
+     * @private
+     */
+    _persistVolume() {
+      if (!this.config.persist) return;
+      saveVolume(this.config.storageKey, this.volume, this.isMuted, this._volumeBeforeMute);
     }
     _restoreVolume() {
       const data = restoreVolume(this.config.storageKey);
