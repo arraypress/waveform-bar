@@ -33,7 +33,10 @@ it doesn't propagate. Grep `opts\.\w* = this\.config` to see the full current se
 ## Conventions
 - **Ships no `index.d.ts`.** The four `waveform-bar-*` wrappers hand-declare
   `WaveformBarConfig` in their own `src/types.ts`. Nothing links those types to
-  `DEFAULTS` here, so they drift silently — a new config key means editing all four.
+  `DEFAULTS` at build time — but each wrapper's `test/config-drift.test.ts` reads this
+  repo's `DEFAULTS` from the installed package and fails when a key isn't typed (or
+  explicitly excluded). A new config key still means editing all four types; after a
+  release, bump the wrappers' devDependency so their drift test sees it.
 - Peer dep on `@arraypress/waveform-player@^1.x`; `dist/` is committed.
 - Logging prefix `[WaveformBar]`.
 
