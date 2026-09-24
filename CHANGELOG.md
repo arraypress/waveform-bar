@@ -43,6 +43,24 @@ All notable changes to this project will be documented in this file.
   (also after seeking backwards). Both reset on load and the throttle compares
   the absolute distance. The exact position is now also saved on `pagehide` and
   when the page becomes hidden — iOS Safari doesn't reliably fire `beforeunload`.
+- **`repeat` was ignored with `showRepeat: false`.** It was only seeded inside
+  the repeat-button branch; it's now seeded (and validated — unknown values fall
+  back to `'off'`) before the button check, as `shuffle` already was.
+- **`destroy()` left inline players stuck "playing".** The external-player map
+  was dropped without pumping `setPlayingState(false)`, so inline players kept
+  their playing state and animation loop running with nothing left to stop them.
+- **`destroy()` leaked session state into a re-init.** Mute state, the
+  pre-mute volume, favourites, cart items, the resume position, active markers
+  and the collapsed flag now reset, so `init()` with different config starts
+  clean.
+- **`addToQueue()` didn't emit `waveformbar:queuechange`**, although
+  `removeFromQueue()`/`clearQueue()` did and the API docs list it.
+- **A refused `play()` no longer strands the bar.** `togglePlay()` and
+  `seekToMarker()` (and repeat-one) called `player.play()` without handling its
+  promise, so blocked autoplay was an unhandled rejection and the bar could keep
+  showing "playing". The rejection is caught and the paused state restored. A
+  rejected `loadTrack()` is no longer surfaced as an unhandled rejection either
+  (load failures still arrive through `onError`).
 
 ### Changed
 

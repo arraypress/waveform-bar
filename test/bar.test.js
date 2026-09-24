@@ -683,3 +683,97 @@ describe('persist:false writes nothing to localStorage', () => {
 		expect(bar.isFavorited('b.mp3')).toBe(true);
 	});
 });
+
+describe('repeat seeding', () => {
+	it('honours config.repeat even when the repeat button is hidden', () => {
+		const bar = makeBar({ persist: false, repeat: 'all', showRepeat: false });
+		expect(bar.barEl.querySelector('.wb-repeat')).toBe(null);
+		expect(bar.repeat).toBe('all');
+	});
+
+	it('coerces an unknown repeat value to off', () => {
+		expect(makeBar({ persist: false, repeat: 'bogus' }).repeat).toBe('off');
+		expect(makeBar({ persist: false, repeat: 'bogus', showRepeat: false }).repeat).toBe('off');
+	});
+});
+
+describe('destroy() state teardown', () => {
+	it('flips registered external players to paused before dropping them', () => {
+		const bar = makeBar();
+		bar.play({ url: 'a.mp3' });
+		bar.player.options.onPlay();
+		const ext = { setPlayingState: vi.fn() };
+		bar._externalPlayers.set('a.mp3', new Set([ext]));
+
+		bar.destroy();
+		expect(ext.setPlayingState).toHaveBeenLastCalledWith(false);
+	});
+
+	it('does not leak mute, favourites, cart, position or markers into a re-init', () => {
+		const bar = makeBar({ persist: false, actions: { favorite: {}, cart: {} } });
+		bar.play({ url: 'a.mp3', markers: [{ time: 1 }] });
+		bar.toggleMute();
+		bar.toggleFavorite();
+		bar.addToCart();
+		bar.player.options.onTimeUpdate(30, 100);
+		bar.collapse();
+
+		bar.destroy();
+		bar.init({ persist: false });
+
+		expect(bar.isMuted).toBe(false);
+		expect(bar._volumeBeforeMute).toBe(1);
+		expect(bar.isFavorited('a.mp3')).toBe(false);
+		expect(bar.isInCart('a.mp3')).toBe(false);
+		expect(bar._lastPosition).toBe(0);
+		expect(bar._lastSaveTime).toBe(0);
+		expect(bar._activeMarkers).toBe(null);
+		expect(bar.isCollapsed).toBe(false);
+	});
+});
+
+describe('addToQueue events', () => {
+	it('emits waveformbar:queuechange', () => {
+		const bar = makeBar();
+		const seen = [];
+		const on = (e) => seen.push(e.detail.queue.map((t) => t.url));
+		document.addEventListener('waveformbar:queuechange', on);
+		bar.addToQueue({ url: 'a.mp3' });
+		bar.addToQueue({ url: 'b.mp3' });
+		document.removeEventListener('waveformbar:queuechange', on);
+		expect(seen).toEqual([['a.mp3'], ['a.mp3', 'b.mp3']]);
+	});
+});
+
+describe('blocked autoplay', () => {
+	/** A play() the browser refuses: 'play' fires, then the promise rejects. */
+	function refusePlay(player) {
+		player.play = () => {
+			player.options.onPlay();
+			return Promise.reject(new DOMException('blocked', 'NotAllowedError'));
+		};
+	}
+
+	it('togglePlay() catches the rejection and restores the paused state', async () => {
+		const bar = makeBar();
+		bar.play({ url: 'a.mp3' });
+		refusePlay(bar.player);
+
+		bar.togglePlay();
+		await new Promise((r) => setTimeout(r, 0));
+
+		expect(bar.isPlaying).toBe(false);
+		expect(bar.playBtnEl.title).toBe('Play');
+	});
+
+	it('seekToMarker() catches the rejection too', async () => {
+		const bar = makeBar();
+		bar.play({ url: 'a.mp3', markers: [{ time: 10 }] });
+		refusePlay(bar.player);
+
+		bar.seekToMarker(0);
+		await new Promise((r) => setTimeout(r, 0));
+
+		expect(bar.isPlaying).toBe(false);
+	});
+});

@@ -182,3 +182,16 @@ describe('real player: request-play detail is normalized before it reaches the q
 		expect(saved.queue[0].player).toBeUndefined();
 	});
 });
+
+describe('real player: destroy()', () => {
+	it('leaves no inline player stuck in the playing state', () => {
+		const inline = mountInline(DOC_EXAMPLE);
+		const bar = makeBar();
+		bar.play({ url: 'song.mp3' });
+		audioStarted(bar);
+		expect(inline.isPlaying).toBe(true);
+
+		bar.destroy();
+		expect(inline.isPlaying).toBe(false);
+	});
+});

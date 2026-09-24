@@ -251,6 +251,12 @@ export class WaveformBar {
      * @returns {WaveformBar}
      */
     destroy() {
+        // Flip every inline external player to paused before the map is
+        // dropped below. The embedded player's teardown doesn't route back
+        // through onPause, so without this they'd stay "playing" (and keep
+        // their animation loop running) with nothing left to stop them.
+        this._pumpExternalPlayState(false);
+
         if (this.player) {
             this.player.destroy();
             this.player = null;
@@ -358,6 +364,17 @@ export class WaveformBar {
         this.currentIndex = -1;
         this.isPlaying = false;
         this.queueOpen = false;
+        this.isCollapsed = false;
+        // Session state that init() only overwrites when persistence restores
+        // it — reset here so a re-init with different config starts clean.
+        this.isMuted = false;
+        this._volumeBeforeMute = 1;
+        this._favorites = new Set();
+        this._cartItems = new Set();
+        this._lastPosition = 0;
+        this._lastSaveTime = 0;
+        this._activeMarkers = null;
+        this._currentMarkerIndex = -1;
         this.isInitialized = false;
         this.config = null;
         return this;
@@ -423,9 +440,12 @@ export class WaveformBar {
         if (nextBtn) nextBtn.addEventListener('click', () => this.next());
         if (this.shareBtnEl) this.shareBtnEl.addEventListener('click', () => this._share());
 
+        // Seed repeat from config regardless of whether the button is shown
+        // (same as shuffle below), so `{ repeat: 'all', showRepeat: false }`
+        // still loops. Unknown values fall back to 'off'.
+        this.repeat = ['off', 'all', 'one'].includes(this.config.repeat) ? this.config.repeat : 'off';
         this.repeatBtnEl = this.barEl.querySelector('.wb-repeat');
         if (this.repeatBtnEl) {
-            this.repeat = this.config.repeat || 'off';
             this._updateRepeatButton();
             this.repeatBtnEl.addEventListener('click', () => this.cycleRepeat());
         }
@@ -603,8 +623,7 @@ export class WaveformBar {
                     // Repeat current track
                     if (this.player) {
                         this.player.seekTo(0);
-                        this.player.play().catch(() => {
-                        });
+                        this._playSafely();
                     }
                     return;
                 }
@@ -1006,14 +1025,37 @@ export class WaveformBar {
             this._loadCurrentTrack();
         }
 
+        this._emit('queuechange', {queue: this.queue, currentIndex: this.currentIndex});
         if (this.config.onQueueChange) this.config.onQueueChange(this.queue, this.currentIndex);
         return this;
     }
 
     togglePlay() {
         if (!this.player) return this;
-        this.isPlaying ? this.player.pause() : this.player.play();
+        this.isPlaying ? this.player.pause() : this._playSafely();
         return this;
+    }
+
+    /**
+     * Start the embedded player, absorbing a refused play(). Blocked
+     * autoplay (NotAllowedError) or an unplayable source rejects the promise;
+     * uncaught, that was an unhandled rejection, and if the 'play' event had
+     * already flipped `isPlaying` the bar stayed showing "playing" forever.
+     * @private
+     */
+    _playSafely() {
+        const restore = () => {
+            this.isPlaying = false;
+            this._updatePlayButton();
+            this._syncPageState();
+            this._pumpExternalPlayState(false);
+        };
+        try {
+            const p = this.player && this.player.play();
+            if (p && typeof p.catch === 'function') p.catch(restore);
+        } catch (e) {
+            restore();
+        }
     }
 
     pause() {
@@ -1685,7 +1727,10 @@ export class WaveformBar {
         } else {
             loadOpts.markers = [];
         }
-        this.player.loadTrack(track.url, track.title, track.artist, loadOpts);
+        // A failed load surfaces through onError; don't also leak the
+        // rejected promise as an unhandled rejection.
+        const loading = this.player.loadTrack(track.url, track.title, track.artist, loadOpts);
+        if (loading && typeof loading.catch === 'function') loading.catch(() => {});
 
         // Store markers for DJ mode (dynamic title/artist updates)
         this._activeMarkers = track.markers && track.markers.length ? track.markers : null;
