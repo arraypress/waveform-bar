@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isSafeHref, parseTrackFromElement, formatTime } from '../src/js/utils.js';
+import { isSafeHref, parseTrackFromElement, formatTime, normalizeTrack, mergeTrack } from '../src/js/utils.js';
 
 describe('formatTime', () => {
 	it('formats M:SS, staying in minutes past an hour', () => {
@@ -100,5 +100,31 @@ describe('parseTrackFromElement shape coercion', () => {
 
 	it('returns null when there is no url', () => {
 		expect(parseTrackFromElement(mk({ wbTitle: 'No URL' }))).toBe(null);
+	});
+});
+
+describe('normalizeTrack / mergeTrack', () => {
+	it('strips the player instance and null fields, keeps caller fields', () => {
+		const t = normalizeTrack({ url: 'a.mp3', title: null, player: {}, price: 5, markers: 'x', waveform: null });
+		expect(t).toEqual({ url: 'a.mp3', price: 5, markers: [] });
+	});
+
+	it('reads only track fields from a player request-play detail', () => {
+		const t = normalizeTrack({ url: 'a.mp3', id: 'wp_abc', title: 'A', player: {}, artist: undefined }, { fromPlayer: true });
+		expect(t).toEqual({ url: 'a.mp3', title: 'A' });
+	});
+
+	it('rejects input with no usable url', () => {
+		expect(normalizeTrack(null)).toBe(null);
+		expect(normalizeTrack('a.mp3')).toBe(null);
+		expect(normalizeTrack({ url: '' })).toBe(null);
+	});
+
+	it('merge never overwrites with empty values', () => {
+		const merged = mergeTrack(
+			{ url: 'a.mp3', title: 'Good', markers: [{ time: 1 }], artist: 'X' },
+			{ url: 'a.mp3', title: null, markers: [], artist: '', artwork: 'c.jpg' }
+		);
+		expect(merged).toEqual({ url: 'a.mp3', title: 'Good', markers: [{ time: 1 }], artist: 'X', artwork: 'c.jpg' });
 	});
 });

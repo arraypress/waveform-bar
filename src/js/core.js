@@ -4,7 +4,15 @@
  */
 
 import {ICONS} from './icons.js';
-import {extractTitle, escapeHtml, formatTime, parseTrackFromElement, isSafeHref} from './utils.js';
+import {
+    extractTitle,
+    escapeHtml,
+    formatTime,
+    parseTrackFromElement,
+    isSafeHref,
+    normalizeTrack,
+    mergeTrack
+} from './utils.js';
 import {
     saveQueueState,
     restoreQueueState,
@@ -80,6 +88,18 @@ const DEFAULTS = {
     onFavorite: null,
     onCart: null
 };
+
+/**
+ * Resolve a public-API track argument (object or bare URL) to a normalized
+ * queue entry, or null when it has no usable url.
+ * @param {Object|string} trackOrUrl
+ * @returns {Object|null}
+ */
+function toTrack(trackOrUrl) {
+    return typeof trackOrUrl === 'string'
+        ? normalizeTrack({url: trackOrUrl, id: trackOrUrl, title: extractTitle(trackOrUrl)})
+        : normalizeTrack(trackOrUrl);
+}
 
 export class WaveformBar {
     constructor() {
@@ -205,7 +225,7 @@ export class WaveformBar {
         // session. It loads paused at the shared timestamp (autoplay is blocked
         // on a cold page open anyway, and landing cued is the right UX).
         if (this._shareTarget && (this._shareTarget.id || this._shareTarget.url)) {
-            const shared = this._resolveSharedTrack(this._shareTarget);
+            const shared = normalizeTrack(this._resolveSharedTrack(this._shareTarget));
             if (shared) this._loadSharedTrack(shared, this._shareTarget.time);
         }
 
@@ -671,6 +691,15 @@ export class WaveformBar {
         // MutationObserver no longer needs to re-bind anything.
         if (!this._docClickTriggers) {
             this._docClickTriggers = (e) => {
+                // Clicks inside an external-mode inline player belong to that
+                // player: its play button / canvas already dispatched a
+                // request-play/-pause/-seek carrying the real intent. On the
+                // documented "trigger + inline surface" element the bubbled
+                // click would otherwise reach [data-wb-play] too, call play()
+                // on the now-current URL and toggle it straight back off (and
+                // a seek-click would pause).
+                if (this._isInsideExternalPlayer(e.target)) return;
+
                 // Queue first — a queue trigger nested in (or alongside) a
                 // play trigger must enqueue, not play. This mirrors the old
                 // per-element handler's stopPropagation() semantics.
@@ -721,10 +750,22 @@ export class WaveformBar {
             this._externalListenersBound = true;
 
             this._onExtRequestPlay = (e) => {
-                const t = e.detail;
-                if (!t || !t.url) return;
+                // The detail is the player's view of its track: its `id` is a
+                // DOM/generated id and `player` is the instance itself, so only
+                // the track fields are taken (see normalizeTrack).
+                let track = normalizeTrack(e.detail, {fromPlayer: true});
+                if (!track) return;
                 e.preventDefault();
-                this.play(t);
+                // The documented markup makes one element both the inline
+                // player and a [data-wb-play] trigger. Its bubbled click is
+                // ignored (see _docClickTriggers), so fold the trigger's
+                // richer data-wb-* metadata (real id, link, meta…) in here. The
+                // player's own non-empty fields still win over the trigger's
+                // fallbacks (e.g. a title derived from the URL).
+                const triggerEl = e.target?.closest?.('[data-wb-play], [data-wb-queue]');
+                const fromTrigger = triggerEl ? parseTrackFromElement(triggerEl) : null;
+                if (fromTrigger && fromTrigger.url === track.url) track = mergeTrack(fromTrigger, track);
+                this.play(track);
             };
 
             this._onExtRequestPause = (e) => {
@@ -772,9 +813,18 @@ export class WaveformBar {
         const WP = window.WaveformPlayer;
         if (!WP || !WP.instances) return;
 
+        // Match instances by container, not by `el.id`: a player whose element
+        // has no id registers under a generated `wp_…` key that is never
+        // written back to the element, so an id lookup silently missed every
+        // id-less inline player (the documented markup has none).
+        const byContainer = new Map();
+        WP.instances.forEach((p) => {
+            if (p && p.container) byContainer.set(p.container, p);
+        });
+
         const newlyDiscovered = [];
         document.querySelectorAll('[data-waveform-player][data-audio-mode="external"]').forEach((el) => {
-            const inst = WP.instances.get(el.id);
+            const inst = byContainer.get(el);
             if (!inst || !inst.options || !inst.options.url) return;
             const url = inst.options.url;
             if (!this._externalPlayers.has(url)) this._externalPlayers.set(url, new Set());
@@ -803,6 +853,27 @@ export class WaveformBar {
                 }
             });
         }
+    }
+
+    /**
+     * Whether a node sits inside the container of an external-mode player the
+     * bar has registered. Only registered players count — a
+     * `[data-waveform-player]` element that never mounted (or runs in self
+     * mode) emits no request-* events, so its trigger clicks must still work.
+     *
+     * @private
+     * @param {EventTarget|null} target
+     * @returns {boolean}
+     */
+    _isInsideExternalPlayer(target) {
+        const el = target?.closest?.('[data-waveform-player]');
+        if (!el || !this._externalPlayers) return false;
+        for (const set of this._externalPlayers.values()) {
+            for (const inst of set) {
+                if (inst.container === el) return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -874,11 +945,8 @@ export class WaveformBar {
      * @returns {WaveformBar}
      */
     play(trackOrUrl) {
-        const track = typeof trackOrUrl === 'string'
-            ? {url: trackOrUrl, id: trackOrUrl, title: extractTitle(trackOrUrl)}
-            : trackOrUrl;
-
-        if (!track || !track.url) return this;
+        const track = toTrack(trackOrUrl);
+        if (!track) return this;
 
         const current = this.getCurrentTrack();
         if (current && current.url === track.url) {
@@ -888,9 +956,10 @@ export class WaveformBar {
 
         const existing = this.queue.findIndex(t => t.url === track.url);
         if (existing >= 0) {
-            // Merge new track data into existing queue entry
-            // so markers, waveform, and other properties get updated
-            this.queue[existing] = {...this.queue[existing], ...track};
+            // Merge new track data into existing queue entry so markers,
+            // waveform, and other properties get updated — but never with
+            // empty values, which would wipe good queued data.
+            this.queue[existing] = mergeTrack(this.queue[existing], track);
             this.currentIndex = existing;
         } else {
             const insertAt = this.currentIndex + 1;
@@ -908,11 +977,8 @@ export class WaveformBar {
      * @returns {WaveformBar}
      */
     addToQueue(trackOrUrl) {
-        const track = typeof trackOrUrl === 'string'
-            ? {url: trackOrUrl, id: trackOrUrl, title: extractTitle(trackOrUrl)}
-            : trackOrUrl;
-
-        if (!track || !track.url) return this;
+        const track = toTrack(trackOrUrl);
+        if (!track) return this;
         if (this.queue.find(t => t.url === track.url)) return this;
 
         this.queue.push(track);
@@ -1377,7 +1443,7 @@ export class WaveformBar {
         // Make it the current queue entry (dedup by url, like play()).
         const existing = this.queue.findIndex(t => t.url === track.url);
         if (existing >= 0) {
-            this.queue[existing] = {...this.queue[existing], ...track};
+            this.queue[existing] = mergeTrack(this.queue[existing], track);
             this.currentIndex = existing;
         } else {
             this.queue.push(track);

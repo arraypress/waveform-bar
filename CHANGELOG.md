@@ -4,6 +4,31 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Inline players without an `id` were never synced.** Discovery looked
+  external-mode players up with `WaveformPlayer.instances.get(el.id)`, but a
+  player whose element has no `id` registers under a generated `wp_…` key that
+  is never written back to the element — so the documented trigger + inline
+  markup (which has no `id`) was never mapped, and never showed play state or
+  progress. Instances are now matched by container.
+- **Clicking an inline player that is also a trigger toggled playback straight
+  back off.** On the documented `data-waveform-player` + `data-wb-play`
+  element, a click on the inline play button dispatched `request-play` *and*
+  bubbled to the bar's delegated trigger listener, which called `play()` on the
+  now-current URL and toggled it off again; a seek-click on the canvas paused.
+  Clicks inside a registered external player are now left to that player's own
+  `request-*` events, and `request-play` folds in the enclosing trigger's
+  `data-wb-*` metadata (id, title, link…) so nothing is lost by ignoring the click.
+- **`request-play` no longer clobbers queued track data.** The event detail was
+  spread straight into the queue entry — including the player's container or
+  generated `id` (which then keyed favourites), the whole `player` instance
+  (serialised to sessionStorage every couple of seconds) and `null`
+  title/artist/artwork, empty markers and a `null` waveform over good queued
+  values. Every path that queues a track (`play()`, `addToQueue()`,
+  `request-play`, session restore, share links) now goes through one
+  `normalizeTrack()`, and merges into an existing entry skip empty values.
+
 ## [1.11.3] — 2026-08-11
 
 ### Fixed

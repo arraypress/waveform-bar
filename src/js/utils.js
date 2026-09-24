@@ -74,6 +74,78 @@ export function formatTime(seconds) {
 }
 
 /**
+ * Coerce a markers value to an array of marker objects with a finite numeric
+ * `time`. Anything else — a string, `null` entries, an unparseable time — is
+ * dropped, because downstream code `.map()`s the array and reads `m.color` /
+ * `m.time` off every entry without further checks.
+ * @param {*} value
+ * @returns {Array<Object>}
+ */
+export function sanitizeMarkers(value) {
+    if (!Array.isArray(value)) return [];
+    return value
+        .map(m => (m && typeof m === 'object' && !Array.isArray(m)) ? {...m, time: Number(m.time)} : null)
+        .filter(m => m && Number.isFinite(m.time));
+}
+
+/**
+ * The only fields a player's request-play `detail` contributes. Its `id` is the
+ * container's DOM id or a generated `wp_…` key — not a track identity — and
+ * `player` is the whole instance, which must never reach the queue (it's
+ * persisted to sessionStorage).
+ */
+const PLAYER_DETAIL_FIELDS = ['url', 'title', 'artist', 'artwork', 'markers', 'waveform'];
+
+/**
+ * Shape any incoming track object into a queue entry. Every path that puts a
+ * track in the queue — play(), addToQueue(), request-play, session restore —
+ * goes through here so they can't disagree about what a track looks like.
+ *
+ * Caller-supplied fields are kept (they're returned by getQueue() and passed
+ * to callbacks), minus `player` and null/undefined values; `markers` is
+ * sanitized and a `waveform` that isn't peaks (array) or a URL/JSON string is
+ * dropped. With `fromPlayer`, only {@link PLAYER_DETAIL_FIELDS} are read.
+ *
+ * @param {*} input
+ * @param {{fromPlayer?: boolean}} [opts]
+ * @returns {Object|null} null when there's no usable url
+ */
+export function normalizeTrack(input, {fromPlayer = false} = {}) {
+    if (!input || typeof input !== 'object' || typeof input.url !== 'string' || !input.url) return null;
+
+    const keys = fromPlayer ? PLAYER_DETAIL_FIELDS : Object.keys(input);
+    const track = {};
+    for (const k of keys) {
+        const v = input[k];
+        if (v == null || k === 'player') continue;
+        track[k] = v;
+    }
+
+    if ('markers' in track) track.markers = sanitizeMarkers(track.markers);
+    if ('waveform' in track && !Array.isArray(track.waveform) && !(typeof track.waveform === 'string' && track.waveform)) {
+        delete track.waveform;
+    }
+    return track;
+}
+
+/**
+ * Merge fresh track data into an existing queue entry. Empty values (null,
+ * undefined, '', []) never overwrite: a sparse source — an inline player with
+ * no title, a trigger with no artwork — must not wipe what's already queued.
+ * @param {Object} base
+ * @param {Object} update
+ * @returns {Object}
+ */
+export function mergeTrack(base, update) {
+    const merged = {...base};
+    for (const [k, v] of Object.entries(update || {})) {
+        if (v == null || v === '' || (Array.isArray(v) && v.length === 0)) continue;
+        merged[k] = v;
+    }
+    return merged;
+}
+
+/**
  * Parse track metadata from a trigger element
  * @param {HTMLElement} el
  * @returns {Object|null}
@@ -94,14 +166,8 @@ export function parseTrackFromElement(el) {
 
     let markers = [];
     try {
-        const parsed = JSON.parse(el.dataset.wbMarkers || el.dataset.markers || 'null');
-        markers = Array.isArray(parsed) ? parsed : [];
+        markers = sanitizeMarkers(JSON.parse(el.dataset.wbMarkers || el.dataset.markers || 'null'));
     } catch (e) {}
-    // Coerce each marker time to a finite number; drop entries that aren't
-    // usable objects or whose time can't be parsed.
-    markers = markers
-        .map(m => (m && typeof m === 'object') ? {...m, time: Number(m.time)} : null)
-        .filter(m => m && Number.isFinite(m.time));
 
     let waveform = null;
     try {
