@@ -78,6 +78,12 @@ All notable changes to this project will be documented in this file.
 - **`showTime: false` now hides the time display.** The option has been in the
   defaults (and every wrapper's types) all along, but nothing read it. The time
   elements are now omitted in both layouts when it's `false`.
+- **The DOM observer no longer rescans on the bar's own updates.** It rebuilt
+  the external-player map and re-synced every trigger on *any* body mutation —
+  including the bar's time text and each inline player's time display, i.e.
+  every timeupdate tick. Mutations inside the bar, the queue panel and
+  registered inline players are now ignored, and the rest are debounced (50ms)
+  so a burst of page changes rescans once.
 
 ### Changed
 

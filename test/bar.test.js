@@ -871,3 +871,35 @@ describe('showTime', () => {
 	});
 });
 
+describe('DOM observer', () => {
+	const settle = () => new Promise((r) => setTimeout(r, 120));
+
+	it('ignores the bar\'s own DOM updates (time text, queue render)', async () => {
+		const bar = makeBar({ persist: false });
+		bar.play({ url: 'a.mp3' });
+		await settle();
+		const spy = vi.spyOn(bar, '_attachExternalPlayers');
+
+		bar.player.options.onTimeUpdate(5, 100);
+		bar.player.options.onTimeUpdate(6, 100);
+		bar._renderQueue();
+		await settle();
+
+		expect(spy).not.toHaveBeenCalled();
+	});
+
+	it('debounces bursts of page mutations into one rescan', async () => {
+		const bar = makeBar({ persist: false });
+		await settle();
+		const spy = vi.spyOn(bar, '_attachExternalPlayers');
+
+		for (let i = 0; i < 5; i++) {
+			document.body.appendChild(document.createElement('div'));
+			await Promise.resolve();
+		}
+		await settle();
+
+		expect(spy).toHaveBeenCalledTimes(1);
+	});
+});
+

@@ -326,6 +326,8 @@ export class WaveformBar {
             this._observer.disconnect();
             this._observer = null;
         }
+        clearTimeout(this._observeTimeout);
+        this._observeTimeout = null;
         if (this._barHeightObserver) {
             this._barHeightObserver.disconnect();
             this._barHeightObserver = null;
@@ -964,12 +966,35 @@ export class WaveformBar {
         // Triggers are handled by the single delegated listener, so the
         // observer only needs to (re)discover late-mounted external-mode
         // players and re-sync page state.
-        // TODO(harden): debounce this callback.
-        this._observer = new MutationObserver(() => {
-            this._attachExternalPlayers();
-            this._syncPageState();
+        //
+        // Mutations the bar causes itself are ignored — its time text changes
+        // on every timeupdate tick, as does each inline player's time display
+        // under setProgress(), and each used to trigger a full rescan. The
+        // rest are debounced so a burst (a list render, infinite scroll)
+        // rescans once.
+        this._observer = new MutationObserver((mutations) => {
+            if (mutations.every(m => this._isOwnMutation(m.target))) return;
+            clearTimeout(this._observeTimeout);
+            this._observeTimeout = setTimeout(() => {
+                this._observeTimeout = null;
+                this._attachExternalPlayers();
+                this._syncPageState();
+            }, 50);
         });
         this._observer.observe(document.body, {childList: true, subtree: true});
+    }
+
+    /**
+     * Whether a mutated node belongs to DOM the bar itself keeps updating: the
+     * bar, its queue panel, or a registered inline player's own markup.
+     * @private
+     * @param {Node} node
+     * @returns {boolean}
+     */
+    _isOwnMutation(node) {
+        if (this.barEl?.contains(node) || this.queueEl?.contains(node)) return true;
+        const el = node.nodeType === 1 ? node : node.parentElement;
+        return !!el && this._isInsideExternalPlayer(el);
     }
 
     // =====================================================================

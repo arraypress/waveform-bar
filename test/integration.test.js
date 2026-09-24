@@ -89,6 +89,20 @@ describe('real player: discovery of id-less inline players', () => {
 	});
 });
 
+describe('real player: late-mounted inline players', () => {
+	it('discovers an inline player mounted after init() and seeds its state', async () => {
+		const bar = makeBar();
+		bar.play({ url: 'song.mp3' });
+		audioStarted(bar);
+
+		const inline = mountInline(DOC_EXAMPLE);
+		await new Promise((r) => setTimeout(r, 120));   // observer debounce
+
+		expect(bar._externalPlayers.get('song.mp3')?.has(inline)).toBe(true);
+		expect(inline.isPlaying).toBe(true);
+	});
+});
+
 describe('real player: clicks on an inline player that is also a trigger', () => {
 	it('clicking the inline play button starts the track once — no toggle back off', () => {
 		const inline = mountInline(DOC_EXAMPLE);
