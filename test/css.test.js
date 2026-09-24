@@ -15,6 +15,13 @@ const CSS = readFileSync(resolve(process.cwd(), 'src/css/waveform-bar.css'), 'ut
 const ICONS = readFileSync(resolve(process.cwd(), 'src/js/icons.js'), 'utf8');
 
 describe('play button optical centring', () => {
+	it('renders the icon svgs as blocks, so no baseline gap lifts them', () => {
+		// The glyphs sit in `display: block` spans; an inline svg in there rides the
+		// text baseline and the line box's descender space pushes it ~3px above the
+		// circle's centre (reported against 1.12.0).
+		expect(CSS).toMatch(/\.wb-play svg\s*\{[^}]*display:\s*block/);
+	});
+
 	it('nudges the play triangle right of the flexbox centre', () => {
 		expect(CSS).toMatch(/\.wb-icon-play svg\s*\{[^}]*margin-left:\s*1px/);
 	});
