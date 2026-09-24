@@ -54,7 +54,7 @@
     "registry": "https://registry.npmjs.org/"
   },
   "peerDependencies": {
-    "@arraypress/waveform-player": "^1.7.2"
+    "@arraypress/waveform-player": "^1.8.0"
   },
   "devDependencies": {
     "@arraypress/waveform-player": "^1.27.1",

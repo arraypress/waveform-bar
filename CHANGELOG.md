@@ -103,6 +103,11 @@ All notable changes to this project will be documented in this file.
   played in it, stop once every track has played (repeat `'off'`), or start a
   new pass under repeat `'all'`. Turning shuffle on starts a fresh pass from the
   current track, and the Next button's disabled state follows the same rule.
+- **Peer dependency raised to `@arraypress/waveform-player@^1.8.0`** (from
+  `^1.7.2`). External mode crashed before 1.8.0, and the bar already relied on
+  APIs that arrived there — `setProgress()`/`setPlayingState()`,
+  `loadTrack(…, { autoplay: false })`, the `waveformplayer:destroy` event — as
+  does the new `barRadius` option.
 
 ## [1.11.3] — 2026-08-11
 
