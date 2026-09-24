@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **`barRadius` config option** — rounded bar caps in px for the bar's
+  waveform (`0` = square), forwarded to the embedded player. `null` (default)
+  keeps the player's own default. It was neither in the defaults nor forwarded,
+  so the bar was stuck on the player's default caps.
+
 ### Fixed
 
 - **Inline players without an `id` were never synced.** Discovery looked
@@ -68,6 +75,9 @@ All notable changes to this project will be documented in this file.
 - **Repeat and favourite buttons expose their state.** Both now set
   `aria-pressed`; the repeat button's `aria-label` names the mode
   (`Repeat: Off/All/One`) since three modes don't fit a pressed/unpressed pair.
+- **`showTime: false` now hides the time display.** The option has been in the
+  defaults (and every wrapper's types) all along, but nothing read it. The time
+  elements are now omitted in both layouts when it's `false`.
 
 ### Changed
 

@@ -836,3 +836,38 @@ describe('queue + toggle button accessibility', () => {
 		expect(btn.getAttribute('aria-pressed')).toBe('true');
 	});
 });
+
+describe('barRadius', () => {
+	it('forwards barRadius to the embedded player, including 0 (square caps)', () => {
+		makeBar({ persist: false, barRadius: 0 });
+		expect(MockPlayer.last.options.barRadius).toBe(0);
+		makeBar({ persist: false, barRadius: 3 });
+		expect(MockPlayer.last.options.barRadius).toBe(3);
+	});
+
+	it('leaves the player default in place when unset', () => {
+		makeBar({ persist: false });
+		expect('barRadius' in MockPlayer.last.options).toBe(false);
+	});
+});
+
+describe('showTime', () => {
+	it('renders the time display by default', () => {
+		const bar = makeBar({ persist: false });
+		expect(bar.barEl.querySelector('.wb-time')).toBeTruthy();
+	});
+
+	it('hides the time display in both layouts when showTime:false', () => {
+		for (const mode of ['waveform', 'classic']) {
+			const bar = makeBar({ persist: false, showTime: false, mode });
+			expect(bar.barEl.querySelector('.wb-time')).toBe(null);
+			expect(bar.barEl.querySelector('.wb-time-current')).toBe(null);
+			expect(bar.barEl.querySelector('.wb-time-total')).toBe(null);
+			// The seek surface itself is still there, and ticks don't throw.
+			expect(bar.barEl.querySelector('.wb-waveform-container')).toBeTruthy();
+			expect(() => bar.player.options.onTimeUpdate(5, 100)).not.toThrow();
+			bar.destroy();
+		}
+	});
+});
+

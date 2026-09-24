@@ -130,7 +130,9 @@ export function buildBarHTML(config) {
         // whose time labels flank the waveform (elapsed left, total right).
         // RIGHT: the secondary controls.
         const left = `<div class="wb-left">${track}${meta}</div>`;
-        const centre = `<div class="wb-centre">${controls}<div class="wb-seek"><span class="wb-time-current">0:00</span><div class="wb-waveform-container"></div><span class="wb-time-total">0:00</span></div></div>`;
+        const cur = config.showTime ? '<span class="wb-time-current">0:00</span>' : '';
+        const total = config.showTime ? '<span class="wb-time-total">0:00</span>' : '';
+        const centre = `<div class="wb-centre">${controls}<div class="wb-seek">${cur}<div class="wb-waveform-container"></div>${total}</div></div>`;
         const right = `<div class="wb-right">${rightControls}</div>`;
         return `<div class="wb-inner">${left}${centre}${right}${collapse}</div>`;
     }
@@ -139,9 +141,14 @@ export function buildBarHTML(config) {
     // Centre: in classic mode (`waveform: false`) the embedded player renders
     // its own built-in 'seekbar' style into this same container (see _initPlayer).
     const left = `<div class="wb-left">${controls}${track}</div>`;
+    // `showTime: false` omits the time display; every time write in core.js
+    // is null-guarded on the cached refs.
+    const time = config.showTime
+        ? '<div class="wb-time"><span class="wb-time-current">0:00</span> / <span class="wb-time-total">0:00</span></div>'
+        : '';
     const centre = `<div class="wb-centre">
         <div class="wb-waveform-container"></div>
-        <div class="wb-time"><span class="wb-time-current">0:00</span> / <span class="wb-time-total">0:00</span></div>
+        ${time}
     </div>`;
     const right = `<div class="wb-right">${meta}${rightControls}</div>`;
     return `<div class="wb-inner">${left}${centre}${right}${collapse}</div>`;

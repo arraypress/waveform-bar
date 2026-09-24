@@ -72,6 +72,7 @@ const DEFAULTS = {
     waveformHeight: 32,
     barWidth: 2,
     barSpacing: 2,        // 2px gap between 2px bars — crisp, separated bars (0 = solid "blob")
+    barRadius: null,      // rounded bar caps in px (0 = square). null = player default (waveform-player 1.8.0+)
     waveformColor: null,
     progressColor: null,
     waveformGradient: 'vertical',
@@ -703,6 +704,8 @@ export class WaveformBar {
         if (this.config.progressColor) opts.progressColor = this.config.progressColor;
         if (this.config.waveformGradient) opts.waveformGradient = this.config.waveformGradient;
         if (this.config.crossOrigin) opts.crossOrigin = this.config.crossOrigin;
+        // `!= null`, not truthiness: 0 (square caps) is a meaningful value.
+        if (this.config.barRadius != null) opts.barRadius = this.config.barRadius;
 
         // Lock-screen / Media Session skip-track buttons drive the bar's queue.
         opts.onNextTrack = () => this.next();
