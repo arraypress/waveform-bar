@@ -122,6 +122,10 @@ export class WaveformBar {
         this._currentMarkerIndex = -1;
         this.repeat = 'off'; // 'off', 'all', 'one'
         this.shuffle = false;
+        // URLs already played in the current shuffle pass — shuffle picks
+        // only from the rest, and the pass ends (or restarts under
+        // repeat 'all') once every track has had its turn.
+        this._shufflePlayed = new Set();
 
         // Load-race guard: bumped before every track load so async
         // continuations (loadTrack().then / restore-seek timeout) can detect
@@ -378,6 +382,7 @@ export class WaveformBar {
         this._lastSaveTime = 0;
         this._activeMarkers = null;
         this._currentMarkerIndex = -1;
+        this._shufflePlayed = new Set();
         this.isInitialized = false;
         this.config = null;
         return this;
@@ -632,9 +637,13 @@ export class WaveformBar {
                 }
 
                 if (this.shuffle && this.config.continuous && this.queue.length > 1) {
-                    // Shuffle: jump to a random track in the queue.
-                    this.currentIndex = this._randomIndex();
-                    this._loadCurrentTrack();
+                    // Shuffle: jump to a random track not yet played this
+                    // pass; stop once they all have (unless repeat 'all').
+                    const i = this._nextShuffleIndex();
+                    if (i >= 0) {
+                        this.currentIndex = i;
+                        this._loadCurrentTrack();
+                    }
                     return;
                 }
 
@@ -644,7 +653,7 @@ export class WaveformBar {
                     this._loadCurrentTrack();
                 } else if (this.repeat === 'all' && this.queue.length > 0) {
                     // Loop back to start (or a random track when shuffling).
-                    this.currentIndex = this.shuffle && this.queue.length > 1 ? this._randomIndex() : 0;
+                    this.currentIndex = this.shuffle && this.queue.length > 1 ? this._nextShuffleIndex() : 0;
                     this._loadCurrentTrack();
                 }
             },
@@ -1093,8 +1102,11 @@ export class WaveformBar {
 
     next() {
         if (this.shuffle && this.queue.length > 1) {
-            this.currentIndex = this._randomIndex();
-            this._loadCurrentTrack();
+            const i = this._nextShuffleIndex();
+            if (i >= 0) {
+                this.currentIndex = i;
+                this._loadCurrentTrack();
+            }
             return this;
         }
         if (this.currentIndex < this.queue.length - 1) {
@@ -1295,6 +1307,7 @@ export class WaveformBar {
         const current = this.getCurrentTrack();
         this.queue = current ? [current] : [];
         this.currentIndex = current ? 0 : -1;
+        this._shufflePlayed = new Set(current ? [current.url] : []);
         this._renderQueue();
         this._saveState();
         this._updateNavButtons();
@@ -1727,6 +1740,7 @@ export class WaveformBar {
         // past the old track's last-save time.
         this._lastPosition = 0;
         this._lastSaveTime = 0;
+        this._shufflePlayed.add(track.url);
 
         // Reset any previously-current external player so its UI flips
         // back to "paused" while the new track loads. The new track's
@@ -1854,7 +1868,11 @@ export class WaveformBar {
             if (nextBtn) nextBtn.classList.remove('wb-disabled');
         } else {
             if (prevBtn) prevBtn.classList.toggle('wb-disabled', this.currentIndex <= 0);
-            if (nextBtn) nextBtn.classList.toggle('wb-disabled', this.currentIndex >= this.queue.length - 1);
+            // Under shuffle, "next" is any unplayed track, not index + 1.
+            const noNext = this.shuffle
+                ? !this.queue.some((t, i) => i !== this.currentIndex && !this._shufflePlayed.has(t.url))
+                : this.currentIndex >= this.queue.length - 1;
+            if (nextBtn) nextBtn.classList.toggle('wb-disabled', noNext);
         }
     }
 
@@ -1919,8 +1937,15 @@ export class WaveformBar {
      * @returns {WaveformBar}
      */
     setShuffle(on) {
+        const wasOn = this.shuffle;
         this.shuffle = !!on;
+        // Switching shuffle on starts a fresh pass from the current track.
+        if (this.shuffle && !wasOn) {
+            const current = this.getCurrentTrack();
+            this._shufflePlayed = new Set(current ? [current.url] : []);
+        }
         this._updateShuffleButton();
+        this._updateNavButtons();
         this._emit('shufflechange', {shuffle: this.shuffle});
         if (this.config.onShuffleChange) this.config.onShuffleChange(this.shuffle);
         return this;
@@ -1935,15 +1960,32 @@ export class WaveformBar {
     }
 
     /**
-     * Pick a random queue index other than the current one (for shuffle).
+     * Pick a random queue index that isn't the current track and hasn't been
+     * played in this shuffle pass. -1 when none is left.
      * @returns {number}
      * @private
      */
     _randomIndex() {
-        if (this.queue.length <= 1) return this.currentIndex;
-        let i = this.currentIndex;
-        while (i === this.currentIndex) {
-            i = Math.floor(Math.random() * this.queue.length);
+        const candidates = [];
+        this.queue.forEach((t, i) => {
+            if (i !== this.currentIndex && !this._shufflePlayed.has(t.url)) candidates.push(i);
+        });
+        if (!candidates.length) return -1;
+        return candidates[Math.floor(Math.random() * candidates.length)];
+    }
+
+    /**
+     * The shuffle advance: a random upcoming track, or — once every track has
+     * played — a fresh pass under repeat 'all', else -1 (stop).
+     * @returns {number}
+     * @private
+     */
+    _nextShuffleIndex() {
+        let i = this._randomIndex();
+        if (i < 0 && this.repeat === 'all') {
+            const current = this.getCurrentTrack();
+            this._shufflePlayed = new Set(current ? [current.url] : []);
+            i = this._randomIndex();
         }
         return i;
     }

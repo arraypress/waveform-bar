@@ -903,3 +903,40 @@ describe('DOM observer', () => {
 	});
 });
 
+describe('shuffle picks upcoming tracks only', () => {
+	function shuffledBar(extra = {}) {
+		const bar = makeBar({ persist: false, shuffle: true, ...extra });
+		bar.addToQueue({ url: 'a.mp3' });   // loads a (index 0)
+		bar.addToQueue({ url: 'b.mp3' });
+		bar.addToQueue({ url: 'c.mp3' });
+		return bar;
+	}
+
+	it('plays every track once, then stops when repeat is off', () => {
+		const bar = shuffledBar();
+		vi.spyOn(Math, 'random').mockReturnValueOnce(0.5).mockReturnValueOnce(0);
+		const seen = [bar.getCurrentTrack().url];
+		bar.next();
+		seen.push(bar.getCurrentTrack().url);
+		bar.next();
+		seen.push(bar.getCurrentTrack().url);
+		vi.restoreAllMocks();
+
+		expect(new Set(seen)).toEqual(new Set(['a.mp3', 'b.mp3', 'c.mp3']));
+
+		const last = bar.getCurrentIndex();
+		bar.next();
+		expect(bar.getCurrentIndex()).toBe(last);
+		bar.player.options.onEnd();             // auto-advance stops too
+		expect(bar.getCurrentIndex()).toBe(last);
+	});
+
+	it('starts a new pass with repeat:"all"', () => {
+		const bar = shuffledBar({ repeat: 'all' });
+		bar.next();
+		bar.next();
+		const last = bar.getCurrentIndex();
+		bar.next();
+		expect(bar.getCurrentIndex()).not.toBe(last);
+	});
+});

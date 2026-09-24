@@ -96,6 +96,13 @@ All notable changes to this project will be documented in this file.
   `.wb-queue-item-title` and `.wb-queue-item-artist` are `<span>`s (block-level
   via CSS) instead of `<div>`s. Class names are unchanged; custom CSS that
   selected by element type (`div.wb-queue-item-title`) needs updating.
+- **Shuffle picks only tracks not yet played, and stops at the end.** Shuffle
+  drew from the whole queue — including tracks already played — and never
+  stopped with repeat off; the docs promise "a random upcoming track". The bar
+  now tracks a shuffle pass: `next()` and auto-advance pick among tracks not yet
+  played in it, stop once every track has played (repeat `'off'`), or start a
+  new pass under repeat `'all'`. Turning shuffle on starts a fresh pass from the
+  current track, and the Next button's disabled state follows the same rule.
 
 ## [1.11.3] — 2026-08-11
 
